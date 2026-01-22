@@ -118,16 +118,13 @@ def plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platfo
         # Also add scatter points in hexagon centres
         ax.scatter(hcoord, vcoord, alpha=0, c='grey')
         # plot the goal positions
-        if g > 0:
-            title = f'Goal {g}'
-        else:
-            title = 'G1 but going to G2'
-        ax.set_title(title, fontsize=20)
+
         # loop through the rows of the consinks_df, plot a filled red circle at the consink
         # position if the mrl is greater than ci_999
 
         clusters = []
-
+        num_sig_clusters = 0
+        mrl_vals = []
         for cluster in consinks_df.index:
 
             x_jitter = np.random.uniform(-jitter[0], jitter[0])
@@ -137,6 +134,7 @@ def plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platfo
 
             sig = consinks_df.loc[cluster, 'sig_g' + str(g)]
             if sig == "sig":
+                num_sig_clusters += 1
                 try:
                     circle = plt.Circle((hcoord[np.int32(consink_plat)-1] + x_jitter,
                                      vcoord[np.int32(consink_plat) - 1] + y_jitter), 30, color='r',
@@ -144,6 +142,7 @@ def plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platfo
                 except:
                     breakpoint()
                 ax.add_artist(circle)
+                mrl_vals.append(consinks_df.loc[cluster, 'mrl_g' + str(g)])
 
                 clusters.append(cluster)
 
@@ -163,7 +162,12 @@ def plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platfo
 
         # reverse the y axis
         ax.invert_yaxis()
-
+        if g > 0:
+            title = f'Goal {g}, num sig consinks: {num_sig_clusters}, mean mrl = {np.round(np.mean(mrl_vals),3)}'
+        else:
+            title = f'G1 but going to G2, num sig consinks: {num_sig_clusters}, mean mrl = {np.round(np.mean(mrl_vals),3)}'
+        ax.set_title(title, fontsize=20)
+        
     plt.savefig(os.path.join(plot_dir, plot_name + '.png'))
     print(f"Saved figure to {os.path.join(plot_dir, plot_name + '.png')}")
     plt.show()
@@ -264,3 +268,78 @@ def plot_consinks_singlesubplot(consink_plat,consink_sig, max_mrls, mean_angles,
     ax.set_aspect('equal')
     ax.invert_yaxis()
     ax.set_title(title)
+
+def plot_all_consinks_onegoal_127sinks(consinks_df, g, method,  goal_numbers, hcoord, vcoord, platforms_trans, jitter, average_sink = None, ax = None):
+
+    ax.set_xlabel('x position', fontsize=16)
+    ax.set_ylabel('y position', fontsize=16)
+
+    # Add some coloured hexagons and adjust the orientation to match the rotated grid
+    for i, (x, y) in enumerate(zip(hcoord, vcoord)):
+        if i + 1 in platforms_trans:
+            colour = 'grey'
+            text = np.where(platforms_trans == i + 1)[0][0] + 1
+            edgecolor = 'k'
+            if g > 0 and goal_numbers[g-1] == text:
+                colour = 'green'
+                edgecolor = 'darkgreen'
+        else:
+            colour = 'white'
+            text = " "
+            edgecolor = 'white'
+        hex = RegularPolygon((x, y), numVertices=6, radius=83,
+                             orientation=np.radians(28),  # Rotate hexagons to align with grid
+                             facecolor=colour, alpha=0.2, edgecolor=edgecolor)
+        ax.text(x, y, text, ha='center', va='center', size=10)  # Start numbering from 1
+        ax.add_patch(hex)
+
+    # Also add scatter points in hexagon centres
+    ax.scatter(hcoord, vcoord, alpha=0, c='grey')
+    # plot the goal positions
+    methods = ["trial_norm", "plat_norm"]
+    if g > 0:
+        title = f'Goal {g}, method {methods[method - 1]}'
+    else:
+        title = f'G1 but going to G2, method {methods[method - 1]}'
+    ax.set_title(title, fontsize=20)
+    # loop through the rows of the consinks_df, plot a filled red circle at the consink
+    # position if the mrl is greater than ci_999
+
+    clusters = []
+
+    for cluster in consinks_df.index:
+
+        x_jitter = np.random.uniform(-jitter[0], jitter[0])
+        y_jitter = np.random.uniform(-jitter[1], jitter[1])
+
+        consink_plat = consinks_df.loc[cluster, 'platform_g' + str(g)]
+
+        sig = consinks_df.loc[cluster, 'sig_g' + str(g)]
+        if sig == "sig":
+            try:
+                circle = plt.Circle((hcoord[np.int32(consink_plat)-1] + x_jitter,
+                                 vcoord[np.int32(consink_plat) - 1] + y_jitter), 30, color='r',
+                                fill=True)
+            except:
+                breakpoint()
+            ax.add_artist(circle)
+
+            clusters.append(cluster)
+
+    if average_sink[g] is not None:
+        circle = plt.Circle(
+            (average_sink[g][0], average_sink[g][1]),
+            40,
+            color='b',
+            fill=True,
+            label='Average sink'
+        )
+
+        ax.add_patch(circle)
+        ax.legend()
+    # make the axes equal
+    ax.set_aspect('equal')
+
+    # reverse the y axis
+    ax.invert_yaxis()
+

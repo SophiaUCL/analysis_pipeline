@@ -21,17 +21,19 @@ def mrlData(spikePos, spikeHD, spikePlats, relDirDist, binEdges, sink_bins):
 
     xAxis = sink_bins['x']
     yAxis = sink_bins['y']
-
+    print("Entered")
     totalDist_Rel = []
+
+    totalDist_Rel = np.zeros_like(relDirDist[0])
 
     for p in np.arange(1,62): # 61 platforms
         # number of spikes for platform p
-        nSpikesPerPlatform = len(np.where(spikePlats == p)[0])
+        nSpikesPerPlatform = spikePlats[p-1]
+
         if nSpikesPerPlatform == 0:
             continue # skip platform
 
         platDist_Rel = relDirDist[p-1] * nSpikesPerPlatform
-
         if len(totalDist_Rel)== 0:
             totalDist_Rel = platDist_Rel
         else:
@@ -39,12 +41,9 @@ def mrlData(spikePos, spikeHD, spikePlats, relDirDist, binEdges, sink_bins):
 
     # They use a different function, but its basically the same
     dirRel2Goal_histCounts = getRelDirDist(spikePos, spikeHD, xAxis, yAxis, binEdges, normalize = False) 
-    #normDist = dirRel2Goal_histCounts/totalDist_Rel
-    print("new methods")
-    normDist = dirRel2Goal_histCounts
-    sumNormDist = normDist.sum(axis = 2)
-    normDistFactor = len(spikeHD)/sumNormDist
-    normDist = normDist * normDistFactor[..., None]
+    normDist = dirRel2Goal_histCounts/totalDist_Rel
+    sumNormDist = normDist.sum(axis=2, keepdims=True)
+    normDist *= len(spikeHD) / sumNormDist
     if np.isnan(normDist).any():
         print("Error, nan values in normDist")
         breakpoint()

@@ -47,10 +47,10 @@ append_config(derivatives_base, config_data)
 zero_pad_trials(rawsession_folder)
 
 # === Running Spikewrap preprocessing ===
-#run_spikewrap(derivatives_base, rawsubject_folder, session_name, concat_runs = True)
+run_spikewrap(derivatives_base, rawsubject_folder, session_name, concat_runs = True)
 
 # === Post processing ===
-#run_spikeinterface(derivatives_base)
+run_spikeinterface(derivatives_base)
 
 # == Obtain length for all of the trials, making a csv out of its === 
 get_length_all_trials(rawsession_folder, trial_numbers)

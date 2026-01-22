@@ -96,6 +96,9 @@ def get_spike_train(sorting, unit_id, pos_data, rawsession_folder, g, frame_rate
     # Now let spiketrain be in frame_rate
     spike_train = np.round(spike_train_secs_g * frame_rate)
     spike_train = [np.int32(el) for el in spike_train if el < len(pos_data)]
+    
+
+
     return spike_train
 
 def get_sink_positions_platforms(derivatives_base):
@@ -222,7 +225,18 @@ def get_limits_from_json(derivatives_base):
     with open(limits_path) as json_data:
         limits = json.load(json_data)
         json_data.close()
-    return limits["x_min"], limits["x_max"], limits["y_min"], limits["y_max"]
+    try:
+        x_min = limits["x_min"]
+        y_min = limits["y_min"]
+        x_max = limits["x_max"]
+        y_max = limits["y_max"]
+    except:
+        x_min = limits["xmin"]
+        y_min = limits["ymin"]
+        x_max = limits["xmax"]
+        y_max = limits["ymax"]
+
+    return x_min, x_max, y_min, y_max
 
 def get_unit_ids(derivatives_base, unit_ids, unit_type):
     # Getting unit IDs depending on type

@@ -159,7 +159,13 @@ def get_screen_coordinates(data_dir): # these are the 4 tv screens in the corner
 
 
 def get_directions_to_position(point_in_space, positions):
-    
+    """ Suppose point in space (sink) is at (50,50) and position (animal) is (0,0)
+    Then the sink is bottom right from the animal (since y increases downwards in image coordinates)
+    Therefore the angle is -45 degrees or -pi/4 radians. This checks out
+    x_diff = 50 - 0 = 50
+    y_diff = 0 - 50 = -50
+    direction = arctan(-50/50) = arctan(-1) = -pi/4
+    """
     x_diff = point_in_space[0] - positions['x']
     y_diff = positions['y'] - point_in_space[1]
     directions = np.arctan2(y_diff, x_diff)

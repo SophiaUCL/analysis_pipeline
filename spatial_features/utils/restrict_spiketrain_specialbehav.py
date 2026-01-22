@@ -11,7 +11,7 @@ def restrict_spiketrain_specialbehav(spike_train, rawsession_folder, goal: int):
     Args:
         spike_train (array): spike times of cell in seconds
         rawsession_folder (str): path to the raw session folder
-        goal (int, optional): goal number (0,1 or 2) 0 meaning that it is rat going to g2 during g1
+        goal (int, optional): goal number (0,1, 2) 0 meaning that it is rat going to g2 during g1. 
 
     Returns:
         spike times in seconds but only within the intervals
@@ -21,7 +21,7 @@ def restrict_spiketrain_specialbehav(spike_train, rawsession_folder, goal: int):
     path = os.path.join(rawsession_folder, "task_metadata", "restricted_final.csv")
 
     intervals_df = pd.read_csv(path)
-   
+
     start_col = 2*goal
     end_col = 2*goal + 1
     
@@ -40,3 +40,21 @@ def restrict_spiketrain_specialbehav(spike_train, rawsession_folder, goal: int):
         
 
     return spike_train[mask]
+
+def get_spike_train(sorting, sample_rate, rawsession_folder, unit_id, g, frame_rate, pos_data):
+    """ Gets the spiketrain for unit unit_id for goal g. Spiketrain returned is in frames
+    If g < 3 (so g0, 1 or 2), we restrict the spiketrain to only that goal"""
+
+    spike_train_unscaled = sorting.get_unit_spike_train(unit_id=unit_id)
+    spike_train_secs = spike_train_unscaled / sample_rate  # trial data in seconds
+
+    # If we're only looking at one goal, restrict the spiketrain to match only period of goal 1 or 2
+    if g < 3:
+        spike_train_restricted = restrict_spiketrain_specialbehav(spike_train_secs, rawsession_folder=rawsession_folder,
+                                                                  goal=g)
+    else:
+        spike_train_restricted = spike_train_secs
+    spike_train = spike_train_restricted * frame_rate
+    spike_train = [np.int32(np.round(el)) for el in spike_train if el < len(pos_data) - 1]
+    return spike_train
+

@@ -5,7 +5,6 @@ Script to run spikewrap
 '''
 import spikewrap as sw
 import os
-import spikeinterface as si
 import json
 from pathlib import Path
 

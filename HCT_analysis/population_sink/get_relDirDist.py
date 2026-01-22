@@ -64,8 +64,8 @@ def getRelDirDist(pos, hd, xAxis, yAxis, angleEdges, normalize = True):
             xDistance = x_bin - x
             yDistance = y - y_bin
 
-            dir2bin = np.atan2(xDistance, yDistance)
-            
+            dir2bin = np.atan2(yDistance, xDistance) ## CHECK IF THIS IS CORRECTT!!!!!
+
             dirRel2bin = hd - dir2bin
             dirRel2bin = (dirRel2bin + np.pi) % (2 * np.pi) - np.pi
 

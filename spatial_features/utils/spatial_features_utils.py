@@ -11,8 +11,6 @@ import warnings
 from astropy.stats import circmean
 import astropy.convolution as cnv
 
-from spatial_features.spatial_functions import get_ratemaps
-from spatial_features.get_sig_cells import get_sig_cells
 
 def load_unit_ids(derivatives_base, unit_type, unit_ids):
     """ Returns unit_ids, the unit_ids that we will create rmaps for"""
@@ -83,14 +81,17 @@ def get_spikes_epoch(spike_train_this_trial, epoch_start, epoch_end, frame_rate)
     spike_train_this_epoch = np.asarray(spike_train_this_epoch, dtype=int)
     return spike_train_this_epoch
                      
-def get_posdata(derivatives_base, method = "ears"):
-    """ Loads pos data path"""
-    if method == "ears":
-        pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', 'XY_HD_alltrials.csv')
-    elif method == "center":
-        pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', 'XY_HD_alltrials_center.csv')
-    else:
-        raise ValueError("Method must be ears or center")
+def get_posdata(derivatives_base, method = "ears", g = None):
+    """ Loads pos data path. g corresponds to the goal, where g == 3 is the full trial"""
+    if g is None or g == 3:
+        if method == "ears":
+            pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', 'XY_HD_alltrials.csv')
+        elif method == "center":
+            pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', 'XY_HD_alltrials_center.csv')
+        else:
+            raise ValueError("Method must be ears or center")
+    elif g in [0,1,2]:
+         pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', f'XY_HD_goal{g}_trials.csv')
     pos_data = pd.read_csv(pos_data_path)
 
     x = pos_data.iloc[:, 0].to_numpy()
@@ -100,7 +101,6 @@ def get_posdata(derivatives_base, method = "ears"):
 
 def get_occupancy_time(hd, frame_rate, num_bins = 24):
     """ Obtains occupancy time for each bin for hd"""
-    num_bins = 24
     hd_filtered = hd[~np.isnan(hd)]
     if np.nanmax(hd_filtered) > 2*np.pi:
         hd_filtered= np.deg2rad(hd_filtered)
@@ -150,7 +150,136 @@ def get_directional_firingrate(hd, spike_train, num_bins, occupancy_time):
     
     return direction_firing_rate, bin_centers
         
+
+def get_goal_numbers(derivatives_base):
+    """
+    Obtains goal numbers from alltrials_trialday.csv
+    
+    Args:
+        rawsession_folder (str): path to the rawdata folder
+    
+    Returns:
+        [goal1, goal2]
+    """
+    rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
+    rawsession_folder = os.path.dirname(rawsession_folder)
+    
+    df_path = os.path.join(rawsession_folder, "behaviour", "alltrials_trialday.csv")
+    df = pd.read_csv(df_path)
+    goal1 = df['Goal 1'].values[0]
+    goal2 = df['Goal 2'].values[0]
+    
+    ## Gets goal coordinates
+    params_path =  os.path.join(derivatives_base, "analysis", "maze_overlay", "maze_overlay_params.json")
+    with open(params_path) as f:
+        params= json.load(f)
+    hcoord_tr = params["hcoord_tr"]
+    vcoord_tr= params["vcoord_tr"]
+    
+    goal1_coords = [hcoord_tr[np.int32(goal1 -1)], vcoord_tr[np.int32(goal1 - 1)]]
+    goal2_coords = [hcoord_tr[np.int32(goal2 -1)], vcoord_tr[np.int32(goal2 - 1)]]
+    
+    coords_path =  os.path.join(derivatives_base, "analysis", "maze_overlay", "goal_coords.json")
+    coords = {
+        "goal1_coords": goal1_coords,
+        "goal2_coords": goal2_coords
+    }
+    os.makedirs(os.path.dirname(coords_path), exist_ok=True)
+    with open(coords_path, 'w') as f:
+        json.dump(coords, f, indent=4)
         
+    return [np.int32(goal1), np.int32(goal2)]
+
+def add_relative_hd(derivatives_base, goal_coordinates, method = "ears", goals = [1,2, 3]):
+    """ Adds relative hd as a column to the positional data files for each goal
+    3 corresponds to full trial
+    method corresponds to whether we look at ears or center"""
+    
+    for i, goal in enumerate(goals):
+        # Load positional data
+        if goal == 1 or goal == 2:
+            pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', f'XY_HD_goal{goal}_trials.csv')
+            pos_data = pd.read_csv(pos_data_path)
+            x = pos_data.iloc[:, 0].to_numpy()
+            y = pos_data.iloc[:, 1].to_numpy()
+            hd = pos_data.iloc[:, 2].to_numpy()
+            
+            if np.nanmax(hd) > 2*np.pi:
+                hd = np.deg2rad(hd)
+            positions = {'x': x, 'y': y}
+            goal_loc = goal_coordinates[i]
+            goaldir_allframes = np.zeros((len(x),1))
+            directions = get_directions_to_position([goal_loc[0], goal_loc[1]], positions)
+            goaldir_allframes[:, 0] = directions
+            relative_direction = get_relative_directions_to_position(directions, hd)
+            pos_data['relative_hd'] = relative_direction
+            pos_data.to_csv(pos_data_path, index=False)
+        elif goal == 3:
+            if method == "ears":
+                fulltrial_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', 'XY_HD_alltrials.csv')
+            elif method == "center":
+                fulltrial_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', 'XY_HD_alltrials_center.csv')
+            goals_without_g3 = [g for g in goals if g !=3]
+            
+            pos_data = pd.read_csv(fulltrial_path)
+            x = pos_data.iloc[:, 0].to_numpy()
+            y = pos_data.iloc[:, 1].to_numpy()
+            hd = pos_data.iloc[:, 2].to_numpy()
+            if np.nanmax(hd) > 2*np.pi:
+                hd = np.deg2rad(hd)
+            for j, g in enumerate(goals_without_g3):
+                positions = {'x': x, 'y': y}
+                goal_loc = goal_coordinates[j]
+                goaldir_allframes = np.zeros((len(x),1))
+                directions = get_directions_to_position([goal_loc[0], goal_loc[1]], positions)
+                goaldir_allframes[:, 0] = directions
+                relative_direction = get_relative_directions_to_position(directions, hd)
+                pos_data[f'relative_hd_g{g}'] = relative_direction
+                pos_data.to_csv(fulltrial_path, index=False)
+
+            
+
+def get_relative_directions_to_position(directions_to_position, head_directions):
+    
+    relative_direction = head_directions - directions_to_position
+    # any relative direction greater than pi is actually less than pi
+    relative_direction[relative_direction > np.pi] -= 2*np.pi
+    # any relative direction less than -pi is actually greater than -pi
+    relative_direction[relative_direction < -np.pi] += 2*np.pi
+    
+    return relative_direction
+
+def get_directions_to_position(point_in_space, positions):
+    """ Suppose point in space (sink) is at (50,50) and position (animal) is (0,0)
+    Then the sink is bottom right from the animal (since y increases downwards in image coordinates)
+    Therefore the angle is -45 degrees or -pi/4 radians. This checks out
+    x_diff = 50 - 0 = 50
+    y_diff = 0 - 50 = -50
+    direction = arctan(-50/50) = arctan(-1) = -pi/4
+    """
+    x_diff = point_in_space[0] - positions['x']
+    y_diff = positions['y'] - point_in_space[1]
+    directions = np.arctan2(y_diff, x_diff)
+    return directions
+        
+        
+    
+def get_goal_coordinates(derivatives_base, rawsession_folder):
+    """
+    Returns:
+        Goal coordinates. If json file with them doesn't exist, it makes it
+    """
+    coords_path =  os.path.join(derivatives_base, "analysis", "maze_overlay", "goal_coords.json")
+    if not os.path.exists(coords_path):
+        get_goal_numbers(derivatives_base, rawsession_folder)
+    
+    with open(coords_path) as f:
+        data= json.load(f)
+
+    goal1_coords = data["goal1_coords"]
+    goal2_coords = data["goal2_coords"]
+    return [goal1_coords, goal2_coords]
+
 def get_ratemaps(spikes, x, y, n: int, binsize = 15, stddev = 5, frame_rate = 25):
     """
     Calculate the rate map for given spikes and positions.
