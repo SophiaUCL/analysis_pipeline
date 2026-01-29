@@ -13,7 +13,7 @@ def get_image(rawsession_folder, method):
     # Getting image
     if method == "video":
         # Here it loads the first frame of the first video in the tracking folder
-        pattern = "T*.avi"
+        pattern = "*T*.avi"
         files = glob.glob(os.path.join(rawsession_folder, 'tracking', pattern)) # finds matches
         video_path = files[0] # takes first video
         
@@ -148,15 +148,24 @@ def overlay_maze_image(derivatives_base, method):
     # Parameters that control the overlay
     radius = 4
     hex_side_length = 88 # Length of the side of the hexagon
-    #hex_side_length = 89
     theta = np.radians(305)  # Rotation angle in radians
-    #theta = np.radians(30)
-    desired_x, desired_y = 1320, 950 # center of 31st platform
-    #desired_x, desired_y = 810, 1000
+    desired_x, desired_y = 1340, 970 # center of 31st platform
     coord = hex_grid(radius) # coordinates
     rotation = 25
     #rotation = 50
     
+    """ Params used before 01/26
+    hex_side_length = 88 # Length of the side of the hexagon
+    theta = np.radians(305)  # Rotation angle in radians
+    desired_x, desired_y = 1320, 950 # center of 31st platform
+    rotation = 25
+    
+    Params used for old camera
+    hex_side_length = 89
+    theta = np.radians(30)
+    desired_x, desired_y = 810, 1000
+    rotation = 50
+    """
     # Calculate initial Cartesian coordinates
     hcoord2, vcoord2 = calculate_cartesian_coords(coord, hex_side_length)
     hcoord_translated, vcoord_translated = get_translated_coords(hcoord2, vcoord2, theta, desired_x, desired_y)

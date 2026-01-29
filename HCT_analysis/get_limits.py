@@ -13,7 +13,7 @@ def get_image(rawsession_folder, method="video"):
     # Getting image
     if method == "video":
         # Here it loads the first frame of the first video in the tracking folder
-        pattern = "T*.avi"
+        pattern = "*T*.avi"
         files = glob.glob(os.path.join(rawsession_folder, 'tracking', pattern)) # finds matches
         video_path = files[0] # takes first video
         

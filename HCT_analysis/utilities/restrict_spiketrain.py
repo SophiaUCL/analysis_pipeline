@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import pandas as pd
-from utilities.create_intervals import create_intervals_df
+from HCT_analysis.utilities.create_intervals import create_intervals_df
 
 def restrict_spiketrain(spike_train, rawsession_folder, goal: int):
     """

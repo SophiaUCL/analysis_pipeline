@@ -94,7 +94,7 @@ def call_inference(fpath, dest_folder, centered_model_folder, centroid_model_fol
 if __name__ == "__main__":
     # Currently running in sleap_new environment from Sopia's computer, and sleap environment on Eylon's
     #derivatives_base = r"S:\Honeycomb_maze_task\derivatives\sub-003_id-2F\ses-02_date-18092025\all_trials"
-    derivatives_base = r"S:\Spatiotemporal_task\derivatives\sub-002_id-1U\ses-05_date-18072025\rerun_1212"
+    derivatives_base = r"E:\Honeycomb_task_1g\derivatives\sub-001_id-2H\ses-01_date-01282026\first_run_2801"
     centroid_model_folder = r"\\ceph-gw02.hpc.swc.ucl.ac.uk\okeefe\Eylon\SLEAP_NEWCAMERA_21072025\models\latest_model\251003_111713.centroid.n=2405"
     centered_model_folder = r"\\ceph-gw02.hpc.swc.ucl.ac.uk\okeefe\Eylon\SLEAP_NEWCAMERA_21072025\models\251003_132856.centered_instance.n=2405"
     all_trials = True  # If you just want to test run it, then set this to False

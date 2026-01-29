@@ -1,25 +1,12 @@
 import numpy as np
-import os
-import glob
-import pandas as pd
-import spikeinterface.extractors as se
-import matplotlib.pyplot as plt
-from calculate_pos_and_dir import get_directions_to_position, get_relative_directions_to_position
-from calculate_occupancy import get_relative_direction_occupancy_by_position, get_axes_limits, get_direction_bins, \
-    bin_directions, get_relative_direction_occupancy_by_position_platformbins
-from utilities.load_and_save_data import load_pickle, save_pickle
-from utilities.restrict_spiketrain_specialbehav import restrict_spiketrain_specialbehav
-from utilities.trials_utils import get_goal_coordinates, get_goal_numbers, get_coords_127sinks, get_unit_ids, get_pos_data, verify_allnans, get_spike_train, get_sink_positions_platforms, translate_positions
-from matplotlib.patches import RegularPolygon
+from HCT_analysis.calculate_pos_and_dir import get_directions_to_position, get_relative_directions_to_position
+from HCT_analysis.calculate_occupancy import get_direction_bins, bin_directions
+from HCT_analysis.utilities.trials_utils import verify_allnans
 import matplotlib
-
 matplotlib.use("QtAgg")
 from joblib import Parallel, delayed
-from utilities.mrl_func import resultant_vector_length
+from HCT_analysis.utilities.mrl_func import resultant_vector_length
 from astropy.stats import circmean
-from tqdm import tqdm
-from typing import Literal
-from plotting.plot_sinks import plot_all_consinks, plot_all_consinks_127sinks
 
 num_candidate_sinks = 127
 """ In this code, the bins are the platforms"""
@@ -516,13 +503,13 @@ def calculate_translated_mrl(spiketrain, dlc_data, reldir_occ_by_pos,  direction
     translated_spiketrain = shift_spiketrain_pergoal(spiketrain, goal, intervals_frames, n_frames)
 
     if method == 1:
-        mrl, _, _ = find_consink(translated_spiketrain, reldir_occ_by_pos,  direction_bins,
+        mrl, *_ = find_consink(translated_spiketrain, reldir_occ_by_pos,  direction_bins,
                                  dlc_data, reldir_allframes)
     elif method ==2:
-        mrl, _, _ = find_consink_method2(translated_spiketrain, reldir_occ_by_pos, direction_bins,
+        mrl, *_ = find_consink_method2(translated_spiketrain, reldir_occ_by_pos, direction_bins,
                                  dlc_data, reldir_allframes, reldir_bin_idx)
     elif method == 3:
-        mrl, _, _ = find_consink_method3(translated_spiketrain, reldir_occ_wholemaze, direction_bins,
+        mrl, *_ = find_consink_method3(translated_spiketrain, reldir_occ_wholemaze, direction_bins,
                                  dlc_data, reldir_allframes)
     else:
         raise ValueError("Method must be 1, 2 or 3")
@@ -560,11 +547,9 @@ def recalculate_consink_to_all_candidates_from_translation(spiketrain, dlc_data,
     return ci
 
 ############ AVERAGE SINK ############
-def calculate_averagesink(consinks_df, hcoord, vcoord, include_g0):
+def calculate_averagesink(consinks_df, hcoord, vcoord, goals_to_include):
     average_positions = {}
-    for g in [0,1,2]:
-        if g == 0 and not include_g0:
-            continue # skip g == 0
+    for g in goals_to_include:
 
         position = []
         for cluster in consinks_df.index:

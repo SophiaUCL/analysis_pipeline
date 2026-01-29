@@ -365,9 +365,9 @@ def run_spikeinterface(derivatives_base, run_analyzer_from_memory = False, run_d
         
         # Plotting
         plot_unit_presence(sorting, unit_features_path)
-        plot_unit_location(unit_features_path, sorting_analyzer, colour_scheme = colour_scheme) # all units
-        plot_unit_location(unit_features_path, sorting_analyzer, good_units_ids= good_units_ids) # good units
-        plot_unit_depth(unit_features_path, sorting_analyzer, colour_scheme)
+        #plot_unit_location(unit_features_path, sorting_analyzer, colour_scheme = colour_scheme) # all units
+        #plot_unit_location(unit_features_path, sorting_analyzer, good_units_ids= good_units_ids) # good units
+        #plot_unit_depth(unit_features_path, sorting_analyzer, colour_scheme)
 
     else:
         df = load_metrics_df(unit_features_path)

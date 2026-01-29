@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from preprocessing.get_length_all_trials import get_length_all_trials
 
-def get_folder(derivatives_base):
+def get_folder(derivatives_base, trials_to_include):
     """ Gets data needed for session"""
     # rawsession folder
     rawsession_folder = derivatives_base.replace("derivatives", "rawdata")
@@ -106,7 +106,7 @@ def combine_pos_csvs(derivatives_base, trials_to_include, frame_rate= 25):
         derivatives_base\analysis\spatial_behav_data\XY_and_HD\XY_HD_alltrials_center.csv: same as before but xy is the center of the animal
 
     """
-    folder_path, trials_length = get_folder(derivatives_base)
+    folder_path, trials_length = get_folder(derivatives_base, trials_to_include)
 
     data = {"x": [], "y": [], "hd": []}
     df = pd.DataFrame(data)

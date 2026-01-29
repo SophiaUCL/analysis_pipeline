@@ -7,7 +7,8 @@ import spikewrap as sw
 import os
 import json
 from pathlib import Path
-
+import torch
+print(torch.cuda.is_available())
 def run_spikewrap(derivatives_base, subject_path, session_name, concat_runs = True):
     """
     Function runs spikewrap
@@ -68,7 +69,7 @@ def run_spikewrap(derivatives_base, subject_path, session_name, concat_runs = Tr
   #  settings = {"n_chan_bin": 384, "nblocks": 0 , "highpass_cutoff": 100}  # nblocks=0 turns off drift correction, I think you can also do it with a "do_correction" (spikeinterface)
     #         "use_binary_file": True,
     #    "delete_recording_dat": True,
-    cfg["sorting"]["kilosort4"] = {"do_CAR": False, "save_preprocessed_copy": True, "nblocks": 0 , "highpass_cutoff": 100}
+    cfg["sorting"]["kilosort4"] = {"do_CAR": False, "save_preprocessed_copy": True, "save_preprocessed_copy": False, "nblocks": 0 , "highpass_cutoff": 100}
 
     session.sort(cfg, run_sorter_method="local", per_shank=False, concat_runs=False)
     

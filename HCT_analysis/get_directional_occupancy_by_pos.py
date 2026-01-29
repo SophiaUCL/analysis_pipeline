@@ -1,10 +1,10 @@
 import os
 import numpy as np
-from calculate_occupancy import get_axes_limits
+from HCT_analysis.calculate_occupancy import get_axes_limits
 import pandas as pd
-from utilities.load_and_save_data import save_pickle, load_pickle
+from HCT_analysis.utilities.load_and_save_data import save_pickle, load_pickle
 import spikeinterface.extractors as se
-from utilities.restrict_spiketrain import restrict_spiketrain
+from HCT_analysis.utilities.trials_utils import get_spike_train, get_limits_from_json
 import json
 from tqdm import tqdm
 
@@ -165,16 +165,7 @@ def bin_spikes_by_position_and_direction_individual_units(unit_ids, sorting, raw
 
     
     for u in tqdm(unit_ids):
-        spike_train_unscaled = sorting.get_unit_spike_train(unit_id=u)
-        spike_train_secs = spike_train_unscaled / sample_rate
-        if goal > 0:
-            # restrict if goal is defined
-            spike_train_secs_g = restrict_spiketrain(spike_train_secs, rawsession_folder, goal=goal)
-        else:
-            spike_train_secs_g = spike_train_secs
-        spike_train = np.round(spike_train_secs_g*frame_rate) # trial data is now in frames in order to match it with xy data
-        spike_train =  np.array([np.int32(el) for el in spike_train if el < len(pos_data)]) # Ensure spike train is within bounds of x and y
-
+        spike_train = get_spike_train(sorting, u, pos_data, rawsession_folder, goal, frame_rate=25, sample_rate=30000)
         if len(spike_train) == 0:
             continue
         # Finding spike times for this unit
@@ -238,15 +229,8 @@ def bin_spikes_by_position_and_direction_individual_units(unit_ids, sorting, raw
 
     return spike_rates_by_position_and_direction
 
-def get_limits_from_json(derivatives_base):
-    """Gets the xy limits from the json file created in the get_limits.py function"""
-    limits_path = os.path.join(derivatives_base, "analysis", "maze_overlay", "limits.json")
-    with open(limits_path) as json_data:
-        limits = json.load(json_data)
-        json_data.close()
-    return limits["xmin"], limits["xmax"], limits["ymin"], limits["ymax"]
 
-def main(derivatives_base, rawsession_folder,  code_to_run = []):
+def main(derivatives_base,  code_to_run = [0,1], goals_to_include = [0,1,2]):
     """
     Main function to calculate directional occupancy by position and spike rates by position and direction.
     NOTE currently does this for all cells, not just good ones
@@ -256,6 +240,9 @@ def main(derivatives_base, rawsession_folder,  code_to_run = []):
         code_to_run (list, optional): List of codes to run. Defaults to [].
         
     """
+    rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
+    rawsession_folder =os.path.dirname(rawsession_folder)
+    
     # Used to calculate spike_rates_by_position_and_direction
     x_min, x_max, y_min, y_max = get_limits_from_json(derivatives_base)
 
@@ -277,7 +264,7 @@ def main(derivatives_base, rawsession_folder,  code_to_run = []):
     limits = get_axes_limits(x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max)
 
     # output folder
-    output_folder = os.path.join(derivatives_base, 'analysis', 'cell_characteristics', 'unit_features', 'spatial_features', 'consink_data')
+    output_folder = os.path.join(derivatives_base, 'analysis', 'cell_characteristics', 'spatial_features', 'consinks')
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
@@ -285,7 +272,7 @@ def main(derivatives_base, rawsession_folder,  code_to_run = []):
         print("Getting directional occupancy by position")
         directional_occupancy_by_position = get_directional_occupancy_by_position(pos_data, limits)
         save_pickle(directional_occupancy_by_position, 'directional_occupancy_by_position', output_folder)
-        for g in [1,2]:
+        for g in goals_to_include:
             pos_data_path_goal = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', f'XY_HD_goal{g}_trials.csv')
             pos_data_goal = pd.read_csv(pos_data_path_goal)
             if np.nanmax(pos_data_goal['hd']) > 2* np.pi + 0.1: # Check if angles are in radians
@@ -298,6 +285,7 @@ def main(derivatives_base, rawsession_folder,  code_to_run = []):
     if 1 in code_to_run:
         # load the directional occupancy by position data
         directional_occupancy_by_position = load_pickle('directional_occupancy_by_position', output_folder)
+        """
         # bin spikes by position and direction
         print("Binning spikes for full trials")
         spike_rates_by_position_and_direction = bin_spikes_by_position_and_direction_individual_units(unit_ids, sorting, rawsession_folder,
@@ -305,8 +293,8 @@ def main(derivatives_base, rawsession_folder,  code_to_run = []):
 
         # save the spike rates by position and direction
         save_pickle(spike_rates_by_position_and_direction, 'spike_rates_by_position_and_direction', output_folder)
-        
-        for g in [1,2]:
+        """
+        for g in goals_to_include:
             print(f"Binning spikes for goal {g}")
             pos_data_path_goal = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', f'XY_HD_goal{g}_trials.csv')
             pos_data_goal = pd.read_csv(pos_data_path_goal)

@@ -22,7 +22,8 @@ def zero_pad_trials(rawsession_folder):
         base = os.path.basename(folder)
         dir_parent = os.path.dirname(folder)
 
-        match = re.search(r'(ses[-_]\d+_g)(\d+)$', base)
+        match = re.search(r'(ses.*_g)(\d+)$', base)
+
         if match:
             prefix, num = match.groups()
             new_name = f"{prefix}{int(num):02d}"  # pad to 2 digits (e.g. g00, g01, g10)

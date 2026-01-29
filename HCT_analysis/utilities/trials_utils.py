@@ -4,8 +4,16 @@ import glob
 import pandas as pd
 import numpy as np
 import json
-from utilities.restrict_spiketrain_specialbehav import restrict_spiketrain_specialbehav
-def append_alltrials(rawsession_folder):
+from HCT_analysis.utilities.restrict_spiketrain_specialbehav import restrict_spiketrain_specialbehav
+
+def ensure_sig_columns(consinks_df, goals):
+    for g in goals:
+        for col in [f'ci_95_g{g}', f'ci_999_g{g}', f'sig_g{g}']:
+            if col not in consinks_df.columns:
+                consinks_df[col] = np.nan
+    return consinks_df
+
+def append_alltrials(derivatives_base):
     """ 
     Takes the alltrials csv and creates a new csv only with the rows of the trial date
 
@@ -17,10 +25,15 @@ def append_alltrials(rawsession_folder):
        
     NOTE: this will most likely still include trials that are not the trials we will use. These have to be removed later. 
     """
+    rawsession_folder =  derivatives_base.replace(r"\derivatives", r"\rawdata")
+    rawsession_folder = os.path.dirname(rawsession_folder)
     
     folder = os.path.basename(rawsession_folder)        # Obtains session name, example: "ses-02_date-05092025"
     date = folder.split("date-")[-1]  # Obtains number after 'date', for example "05092025"
     
+    if os.path.exists(os.path.join(rawsession_folder,"behaviour", "alltrials_trialday.csv")):
+        print("Trialday csv exists, exiting")
+        return
     alltrials_paths = glob.glob(os.path.join(rawsession_folder,"behaviour" ,"alltrials*.csv"))
     alltrials_path = alltrials_paths[0]
     
@@ -166,24 +179,6 @@ def get_goal_numbers(derivatives_base):
     goal1 = df['Goal 1'].values[0]
     goal2 = df['Goal 2'].values[0]
     
-    ## Gets goal coordinates
-    params_path =  os.path.join(derivatives_base, "analysis", "maze_overlay", "maze_overlay_params.json")
-    with open(params_path) as f:
-        params= json.load(f)
-    hcoord_tr = params["hcoord_tr"]
-    vcoord_tr= params["vcoord_tr"]
-    
-    goal1_coords = [hcoord_tr[np.int32(goal1 -1)], vcoord_tr[np.int32(goal1 - 1)]]
-    goal2_coords = [hcoord_tr[np.int32(goal2 -1)], vcoord_tr[np.int32(goal2 - 1)]]
-    
-    coords_path =  os.path.join(derivatives_base, "analysis", "maze_overlay", "goal_coords.json")
-    coords = {
-        "goal1_coords": goal1_coords,
-        "goal2_coords": goal2_coords
-    }
-    os.makedirs(os.path.dirname(coords_path), exist_ok=True)
-    with open(coords_path, 'w') as f:
-        json.dump(coords, f, indent=4)
         
     return [np.int32(goal1), np.int32(goal2)]
 
@@ -210,8 +205,28 @@ def get_goal_coordinates(derivatives_base, rawsession_folder):
     """
     coords_path =  os.path.join(derivatives_base, "analysis", "maze_overlay", "goal_coords.json")
     if not os.path.exists(coords_path):
-        get_goal_numbers(derivatives_base, rawsession_folder)
-    
+            ## Gets goal coordinates
+        goals = get_goal_numbers(derivatives_base)
+        goal1 = goals[0]
+        goal2 = goals[1]
+        params_path =  os.path.join(derivatives_base, "analysis", "maze_overlay", "maze_overlay_params.json")
+        with open(params_path) as f:
+            params= json.load(f)
+        hcoord_tr = params["hcoord_tr"]
+        vcoord_tr= params["vcoord_tr"]
+        
+        goal1_coords = [hcoord_tr[np.int32(goal1 -1)], vcoord_tr[np.int32(goal1 - 1)]]
+        goal2_coords = [hcoord_tr[np.int32(goal2 -1)], vcoord_tr[np.int32(goal2 - 1)]]
+        
+        coords_path =  os.path.join(derivatives_base, "analysis", "maze_overlay", "goal_coords.json")
+        coords = {
+            "goal1_coords": goal1_coords,
+            "goal2_coords": goal2_coords
+        }
+        os.makedirs(os.path.dirname(coords_path), exist_ok=True)
+        with open(coords_path, 'w') as f:
+            json.dump(coords, f, indent=4)
+        
     with open(coords_path) as f:
         data= json.load(f)
 
@@ -254,6 +269,9 @@ def get_unit_ids(derivatives_base, unit_ids, unit_type):
         pyramidal_units_df = pd.read_csv(pyramidal_units_path)
         pyramidal_units = pyramidal_units_df['unit_ids'].values
         unit_ids = pyramidal_units
+    elif unit_type == "test":
+        print("getting first 5 units")
+        unit_ids = unit_ids[:5]
     return unit_ids
 
 if __name__ == "__main__":

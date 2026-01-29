@@ -10,7 +10,8 @@ def add_platforms_to_all(pos_data, params):
     hcoord = params["hcoord_tr"]
     vcoord = params["vcoord_tr"]
     hex_side_length = params["hex_side_length"]
-        
+    
+    print("Adding platforms to positional data")
     for i in tqdm(range(len(pos_data))):
         x = pos_data['x'].iloc[i]
         y = pos_data['y'].iloc[i]

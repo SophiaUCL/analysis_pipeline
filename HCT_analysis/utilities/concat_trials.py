@@ -4,7 +4,7 @@ import glob
 import pandas as pd
 
 
-def concat_trials(rawsession_folder):
+def concat_trials(derivatives_base):
     """
     Concatenates all trial files in the form {ratID}_{date}_g{trial}.csv into one dataframe and saves it as csv
 
@@ -14,6 +14,9 @@ def concat_trials(rawsession_folder):
     Output:
         rawsession_folder/behaviour/concatenated_trials.csv: all trials concatenated
     """
+    rawsession_folder = rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
+    rawsession_folder = os.path.dirname(rawsession_folder)
+    
     # List of all trial files
     trial_files = glob.glob(os.path.join(rawsession_folder, "behaviour", "*_g*.csv"))
 

@@ -1,16 +1,7 @@
 import numpy as np
 import os
-import glob
-import pandas as pd
 from matplotlib.lines import Line2D
-import spikeinterface.extractors as se
 import matplotlib.pyplot as plt
-from calculate_pos_and_dir import get_directions_to_position, get_relative_directions_to_position
-from calculate_occupancy import get_relative_direction_occupancy_by_position, get_axes_limits, get_direction_bins, \
-    bin_directions
-from utilities.load_and_save_data import load_pickle, save_pickle
-from utilities.restrict_spiketrain_specialbehav import restrict_spiketrain_specialbehav
-from utilities.trials_utils import get_limits_from_json, get_goal_coordinates, get_coords
 from matplotlib.patches import RegularPolygon
 from matplotlib.patches import Patch
 
@@ -82,17 +73,16 @@ def plot_all_consinks(consinks_df, goal_coordinates, hcoord, vcoord, limits, jit
     print(f"Saved figure to {os.path.join(plot_dir, plot_name + '.png')}")
     plt.show()
 
-def plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platforms_trans, jitter, plot_dir, average_sink = None, include_g0 = True, plot_name='ConSinks'):
-    num_goals = 3
+def plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platforms_trans, jitter, plot_dir, average_sink = None, show_plots = True,  goals_to_include = [0,1,2], plot_name='ConSinks'):
+    num_goals = len(goals_to_include)
     # Create two subplots
-    fig, axes = plt.subplots(1, num_goals - 1  + include_g0, figsize=(10*(num_goals - 1  + include_g0), 10))
+    fig, axes = plt.subplots(1, num_goals, figsize=(10*(num_goals - 1), 10))
+    axes = np.atleast_1d(axes)
     axes = axes.flatten()
     fig.suptitle(plot_name, fontsize=24)
 
-    for g in range(num_goals):
-        if g == 0 and not include_g0:
-            continue
-        ax = axes[g - 1 + include_g0]
+    for pos, g in enumerate(goals_to_include):
+        ax = axes[pos]
         ax.set_xlabel('x position', fontsize=16)
         ax.set_ylabel('y position', fontsize=16)
 
@@ -146,7 +136,7 @@ def plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platfo
 
                 clusters.append(cluster)
 
-        if average_sink[g] is not None:
+        if average_sink[g] is not None and not np.isnan(average_sink[g]):
             circle = plt.Circle(
                 (average_sink[g][0], average_sink[g][1]),
                 40,
@@ -170,7 +160,8 @@ def plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platfo
         
     plt.savefig(os.path.join(plot_dir, plot_name + '.png'))
     print(f"Saved figure to {os.path.join(plot_dir, plot_name + '.png')}")
-    plt.show()
+    if show_plots:
+        plt.show()
 
 def plot_consinks_singlesubplot(consink_plat,consink_sig, max_mrls, mean_angles, percentile_95th, i_loc,  g, goal_numbers, hcoord, vcoord, platforms_trans,  whole_field_firing, jitter, title, ax):
 

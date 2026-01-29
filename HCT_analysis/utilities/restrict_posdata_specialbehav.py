@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import json
 #from utilities.add_platforms_any_df import add_platforms_to_csv
 
-def restrict_posdata_specialbehav(derivatives_base,   frame_rate = 25):
+def restrict_posdata_specialbehav(derivatives_base, goals_to_include, frame_rate = 25):
     """
     Restricts the pos_data to the intervals of the goal.
     
@@ -44,7 +44,7 @@ def restrict_posdata_specialbehav(derivatives_base,   frame_rate = 25):
         print(" Maze outline JSON not found; skipping red outline overlay.")
         outline_x, outline_y = None, None
         
-    for goal in [0, 1,2]:
+    for goal in [0,1,2]:
         pos_data_org = pos_data.copy()
         
         

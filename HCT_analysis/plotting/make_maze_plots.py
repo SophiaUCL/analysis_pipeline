@@ -4,18 +4,17 @@ from matplotlib.patches import RegularPolygon
 import os
 import pandas as pd
 import matplotlib.patches as mpatches
-from matplotlib import cm
 import matplotlib
-from matplotlib.colors import LinearSegmentedColormap
-matplotlib.use('Qt5Agg') 
-def plot_startplatforms(derivatives_base, rawsession_folder, goal_platforms):
+matplotlib.use('TkAgg')
+def plot_startplatforms(derivatives_base, goal_platforms, goals_to_include, show_plots = True):
     """
     Shows a maze plot with all the start platforms
 
     Exports:
         start_platforms.png into {derivatives_base}/analysis/maze_behaviour
     """
-    
+    rawsession_folder = rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
+    rawsession_folder = os.path.dirname(rawsession_folder)
     path = os.path.join(rawsession_folder, "behaviour", "concatenated_trials.csv")
     df = pd.read_csv(path)
     
@@ -37,7 +36,7 @@ def plot_startplatforms(derivatives_base, rawsession_folder, goal_platforms):
             colour = "red"
         elif i + 1 == goal_platforms[0]:
             colour = "green"
-        elif i + 1 == goal_platforms[1]:
+        elif i + 1 == goal_platforms[1] and len(goals_to_include) > 1:
             colour = "blue"
         else:
             colour = "grey"
@@ -48,10 +47,11 @@ def plot_startplatforms(derivatives_base, rawsession_folder, goal_platforms):
         ax.add_patch(hex)
     start_patch = mpatches.Patch(color="red", alpha=0.2, label="Starts")
     goal_patch = mpatches.Patch(color="green", alpha=0.2, label="Goal 1")
-    goal2_patch = mpatches.Patch(color="blue", alpha=0.2, label="Goal 2")
-
-    ax.legend(handles=[start_patch, goal_patch, goal2_patch], loc="upper right")
-
+    if len(goals_to_include) > 1:
+        goal2_patch = mpatches.Patch(color="blue", alpha=0.2, label="Goal 2")
+        ax.legend(handles=[start_patch, goal_patch, goal2_patch], loc="upper right")
+    else:
+        ax.legend(handles=[start_patch, goal_patch], loc="upper right")
         # Also add scatter points in hexagon centres
     ax.scatter(hcoord, vcoord, alpha=0, c = 'grey')
     ax.set_title('Start platforms (red) and goal platforms (green)')
@@ -59,25 +59,33 @@ def plot_startplatforms(derivatives_base, rawsession_folder, goal_platforms):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     plt.savefig(os.path.join(output_folder, "start_platforms.png"), dpi=300)
-    plt.show()
+    if show_plots:
+        plt.show()
+    plt.close(fig)
 
     print(f"File saved to output folder: {output_folder}")
     
 
-def plot_occupancy(derivatives_base, rawsession_folder, goal_platforms):
+def plot_occupancy(derivatives_base, goal_platforms, goals_to_include = [0,1,2], show_plots=True):
     """
-    Shows a maze plot with the occupancy of each platform for goal 1 (left) goal 2 (middle) and all trials (right)
+    Shows a maze plot with the occupancy of each platform for goal 1 (left) goal 2 (middle) (if applicable) and all trials (right)
     low: red, high: green
 
     Exports:
         occupancy.png into {derivatives_base}/analysis/maze_behaviour
     """
+    goals_to_include = [el for el in goals_to_include if el != 0]
+    if len(goals_to_include) > 1:
+        goals_to_include = np.append(goals_to_include, 3)
+    rawsession_folder = rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
+    rawsession_folder = os.path.dirname(rawsession_folder)
     # Input path
     path = os.path.join(rawsession_folder, "behaviour", "concatenated_trials.csv")
     df = pd.read_csv(path)
 
     # 3 x 1 subplot
-    fig, ax = plt.subplots(1, 3, figsize=(18,6))
+    fig, ax = plt.subplots(1,len(goals_to_include), figsize=(6*len(goals_to_include),6))
+    ax = np.atleast_2d(ax)
     ax = ax.flatten()
     fig.suptitle("Frequency of visit per platform")
     hcoord, vcoord, hcoord_rotated, vcoord_rotated = get_coords()
@@ -85,11 +93,11 @@ def plot_occupancy(derivatives_base, rawsession_folder, goal_platforms):
 
     cmap = plt.cm.RdYlGn
     # Go through goals and all trials
-    for g in [0,1,2]: # g = 0: goal 1, g = 1: goal 2, g = 2: all trials
-        if g == 0:
+    for j, g in enumerate(goals_to_include): # g = 1: goal 1, g = 2: goal 2, g = 3: all trials
+        if g == 1:
             df_g = df[df['goal'] == goal_platforms[0]]
             title = "Goal 1"
-        elif g == 1:
+        elif g == 2:
             df_g = df[df['goal'] == goal_platforms[1]]
             title = "Goal 2"
         else:
@@ -120,34 +128,41 @@ def plot_occupancy(derivatives_base, rawsession_folder, goal_platforms):
             hex = RegularPolygon((x, y), numVertices=6, radius=2. / 3.,
                                 orientation=np.radians(60),  # Rotate hexagons to align with grid
                                 facecolor=colour, alpha=0.2, edgecolor=edgecolor, linewidth= linewidth)
-            ax[g].text(x, y, text,  ha='center', va='center', size=15)  # Start numbering from 1
-            ax[g].add_patch(hex)
+            ax[j].text(x, y, text,  ha='center', va='center', size=15)  # Start numbering from 1
+            ax[j].add_patch(hex)
             # Also add scatter points in hexagon centres
-        ax[g].scatter(hcoord, vcoord, alpha=0, c = 'grey')
-        ax[g].set_title(title)
-        ax[g].set_aspect('equal')
+        ax[j].scatter(hcoord, vcoord, alpha=0, c = 'grey')
+        ax[j].set_title(title)
+        ax[j].set_aspect('equal')
     output_folder = os.path.join(derivatives_base, "analysis", "maze_behaviour")
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     plt.savefig(os.path.join(output_folder, "occupancy.png"), dpi=300)
-    plt.show()
 
+    if show_plots:
+        plt.show()
+    plt.close(fig)
     print(f"File saved to output folder: {output_folder}")
 
-def plot_propcorrect(derivatives_base, rawsession_folder, goal_platforms):
+def plot_propcorrect(derivatives_base,goal_platforms, goals_to_include = [0,1,2], show_plots = True):
     """
-    Shows a maze plot with the proportion of correct choices for goal 1 (left) goal 2 (middle) and all trials (right)
+    Shows a maze plot with the proportion of correct choices for goal 1 (left) goal 2 (middle) (fif applicable) and all trials (right)
 
     Exports:
         proportion_correct.png into {derivatives_base}/analysis/maze_behaviour
     """
-    
+    goals_to_include = [el for el in goals_to_include if el != 0]
+    if len(goals_to_include) > 1:
+        goals_to_include = np.append(goals_to_include, 3)
+    rawsession_folder = rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
+    rawsession_folder = os.path.dirname(rawsession_folder)
     path = os.path.join(rawsession_folder, "behaviour", "concatenated_trials.csv")
     df = pd.read_csv(path)
 
     # 3 x 1 subplot
-    fig, ax = plt.subplots(1, 3, figsize=(18,6))
+    fig, ax = plt.subplots(1, len(goals_to_include), figsize=(6*len(goals_to_include),6))
     fig.suptitle("Proportion correct per platform and for each trial section")
+    ax = np.atleast_2d(ax)
     ax = ax.flatten()
 
     # coordinates
@@ -157,11 +172,11 @@ def plot_propcorrect(derivatives_base, rawsession_folder, goal_platforms):
     cmap = matplotlib.colormaps['RdYlGn']
     
     # Go through goals and all trials
-    for g in [0,1,2]: # g = 0: goal 1, g = 1: goal 2, g = 2: all trials
-        if g == 0:
+    for j, g in enumerate(goals_to_include): # g = 1: goal 1, g = 2: goal 2, g = 3: all trials
+        if g == 1:
             df_g = df[df['goal'] == goal_platforms[0]]
             title = "Goal 1"
-        elif g == 1:
+        elif g == 2:
             df_g = df[df['goal'] == goal_platforms[1]]
             title = "Goal 2"
         else:
@@ -198,18 +213,19 @@ def plot_propcorrect(derivatives_base, rawsession_folder, goal_platforms):
             hex = RegularPolygon((x, y), numVertices=6, radius=2. / 3.,
                                 orientation=np.radians(60),  # Rotate hexagons to align with grid
                                 facecolor=colour, alpha=0.2, edgecolor=edgecolor, linewidth=linewidth)
-            ax[g].text(x, y, text,  ha='center', va='center', size=15)  # Start numbering from 1
-            ax[g].add_patch(hex)
+            ax[j].text(x, y, text,  ha='center', va='center', size=15)  # Start numbering from 1
+            ax[j].add_patch(hex)
             # Also add scatter points in hexagon centres
-        ax[g].scatter(hcoord, vcoord, alpha=0, c = 'grey')
-        ax[g].set_title(title)
-        ax[g].set_aspect('equal')
+        ax[j].scatter(hcoord, vcoord, alpha=0, c = 'grey')
+        ax[j].set_title(title)
+        ax[j].set_aspect('equal')
     output_folder = os.path.join(derivatives_base, "analysis", "maze_behaviour")
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     plt.savefig(os.path.join(output_folder, "proportion_correct.png"), dpi=300)
-    plt.show()
-
+    if show_plots:
+        plt.show()
+    plt.close(fig)
     print(f"File saved to output folder: {output_folder}") 
 
         

@@ -171,7 +171,7 @@ def plot_trajectory(position, trajectory_data_folder, tr):
     fig.show()
     
 def find_filepath(folder_directory, tr):
-    pattern = os.path.join(folder_directory, f"T{tr}_*.h5")
+    pattern = os.path.join(folder_directory, f"*T{tr}_*.h5")
     matches = glob.glob(pattern)
 
     if len(matches) == 0:

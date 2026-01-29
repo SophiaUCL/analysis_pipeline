@@ -6,25 +6,23 @@ import glob
 import pandas as pd
 import spikeinterface.extractors as se
 import matplotlib.pyplot as plt
-from calculate_occupancy import get_direction_bins, \
+from HCT_analysis.calculate_occupancy import get_direction_bins, \
      get_relative_direction_occupancy_by_position_platformbins
-from utilities.load_and_save_data import load_pickle, save_pickle
-from utilities.restrict_spiketrain_specialbehav import restrict_spiketrain_specialbehav
-from utilities.trials_utils import get_goal_numbers, get_coords_127sinks, get_unit_ids, get_pos_data, get_spike_train, get_sink_positions_platforms, translate_positions
+from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
+from HCT_analysis.utilities.trials_utils import ensure_sig_columns, get_goal_numbers, get_coords_127sinks, get_unit_ids, get_pos_data, get_spike_train, get_sink_positions_platforms, translate_positions
 import matplotlib
-from turn_restricteddf_frames import turn_restricteddf_frames
-matplotlib.use("QtAgg")
-from tqdm import tqdm
-from typing import Literal
-from plotting.plot_sinks import plot_all_consinks, plot_all_consinks_127sinks
-from find_consinks_main_functions import get_reldir_bin_idx, calculate_averagesink, find_consink, get_reldir_occ_wholemaze, recalculate_consink_to_all_candidates_from_translation, find_consink_method2, find_consink_method3, get_dir_allframes
-sys.path.append(str(Path(__file__).resolve().parents[1]))
+from HCT_analysis.turn_restricteddf_frames import turn_restricteddf_frames
+from HCT_analysis.plotting.plot_sinks import  plot_all_consinks_127sinks
+from HCT_analysis.find_consinks_main_functions import get_reldir_bin_idx, calculate_averagesink, find_consink, get_reldir_occ_wholemaze, recalculate_consink_to_all_candidates_from_translation, find_consink_method2, find_consink_method3, get_dir_allframes
 from maze_and_platforms.overlay_maze_image_consinks import overlay_maze_image_consinks
 num_candidate_sinks = 127
 from astropy.stats import circmean
 from matplotlib.patches import RegularPolygon
 from matplotlib.colors import Normalize
 import matplotlib.cm as cm
+matplotlib.use("QtAgg")
+from tqdm import tqdm
+from typing import Literal
 
 
 """ In this code, the bins are the platforms (127 in total)
@@ -37,15 +35,50 @@ NOTE: Potential issues to still look at: if ctrl distribution has low values in 
 This can be fixed by setting a threshold for min occupancy in ctrl distribution
 Threshold hasn't been decided yet
 """
+def export_sig_sinks(methods,output_folder,goals_to_include=[0, 1, 2]):
+    """
+    Export ONLY unit IDs of significant consinks.
+    One file per method, containing a dict: {goal: np.array(unit_ids)}
+    """
 
+    for method in methods:
+        consinks_df = load_pickle(f'consinks_df_m{method}', output_folder)
+
+        sig_units_per_goal = {}
+
+        for g in goals_to_include:
+            sig_col = f'sig_g{g}'
+            if sig_col not in consinks_df.columns:
+                print(f"[Method {method}] No column {sig_col}, skipping")
+                continue
+
+            unit_ids = consinks_df.index[
+                consinks_df[sig_col] == 'sig'
+            ].to_numpy()
+
+            sig_units_per_goal[g] = unit_ids.astype(int)
+
+            print(
+                f"[Method {method}, Goal {g}] "
+                f"{len(unit_ids)} significant units"
+            )
+
+        save_path = os.path.join(
+            output_folder,
+            f'significant_consink_unit_ids_method_{method}.npy'
+        )
+        np.save(save_path, sig_units_per_goal, allow_pickle=True)
+
+        print(f"[Method {method}] Saved → {save_path}")
 
 def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
-         unit_type: Literal['pyramidal', 'good', 'all'], methods,  code_to_run=[], include_g0 = True, frame_rate=25, sample_rate=30000):
+         unit_type: Literal['pyramidal', 'good', 'all', 'test'], methods = [1,2,3],  code_to_run=[-1, 0, 1,2,3,4], goals_to_include = [0,1,2], show_plots = True, frame_rate=25, sample_rate=30000):
     """
     Code to find consinks, based on Jake's code
 
 
     """
+    print(f"Calculating consinks using methods {methods}")
     # Path to rawsession folder
     rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
     rawsession_folder = os.path.dirname(rawsession_folder)
@@ -93,21 +126,26 @@ def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
     if -1 in code_to_run:
         print("Calculating relative direction occupancy by position")
         reldir_occ_by_pos= get_relative_direction_occupancy_by_position_platformbins(pos_data_reldir, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
-        if include_g0:
-            reldir_occ_by_pos_g0= get_relative_direction_occupancy_by_position_platformbins(pos_data_g0, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
-        reldir_occ_by_pos_g1 = get_relative_direction_occupancy_by_position_platformbins(pos_data_g1, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
-        reldir_occ_by_pos_g2 = get_relative_direction_occupancy_by_position_platformbins(pos_data_g2, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
         np.save(os.path.join(output_folder, file_name), reldir_occ_by_pos)
-        np.save(os.path.join(output_folder, 'reldir_occ_by_pos_g1.npy'), reldir_occ_by_pos_g1)
-        np.save(os.path.join(output_folder, 'reldir_occ_by_pos_g2.npy'), reldir_occ_by_pos_g2)
+        if 0 in goals_to_include:
+            reldir_occ_by_pos_g0= get_relative_direction_occupancy_by_position_platformbins(pos_data_g0, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
+            np.save(os.path.join(output_folder, 'reldir_occ_by_pos_g0.npy'), reldir_occ_by_pos_g0)
+        if 1 in goals_to_include:
+            reldir_occ_by_pos_g1 = get_relative_direction_occupancy_by_position_platformbins(pos_data_g1, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
+            np.save(os.path.join(output_folder, 'reldir_occ_by_pos_g1.npy'), reldir_occ_by_pos_g1)
+        if 2 in goals_to_include:
+            reldir_occ_by_pos_g2 = get_relative_direction_occupancy_by_position_platformbins(pos_data_g2, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
+            np.save(os.path.join(output_folder, 'reldir_occ_by_pos_g2.npy'), reldir_occ_by_pos_g2)
 
     else:
         print("Loading reldir occ, not calculating")
-        if include_g0:
-            reldir_occ_by_pos_g0= get_relative_direction_occupancy_by_position_platformbins(pos_data_g0, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
+        if 0 in goals_to_include:
+            reldir_occ_by_pos_g0= np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g0.npy'))
         reldir_occ_by_pos = np.load(os.path.join(output_folder, file_name))
-        reldir_occ_by_pos_g1 = np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g1.npy'))
-        reldir_occ_by_pos_g2 = np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g2.npy'))
+        if 1 in goals_to_include:
+            reldir_occ_by_pos_g1 = np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g1.npy'))
+        if 2 in goals_to_include:
+            reldir_occ_by_pos_g2 = np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g2.npy'))
 
     ################# CALCULATE CONSINKS ###########################################
     
@@ -124,16 +162,8 @@ def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
             for unit_id in tqdm(unit_ids):
                 consinks[unit_id] = {'unit_id': unit_id}
 
-                for g in [0, 1, 2]:
-                    if g == 0 and not include_g0:
-                        # store with goal suffix
-                        consinks[unit_id][f'mrl_g{g}'] = np.nan
-                        consinks[unit_id][f'position_g{g}'] = np.nan
-                        consinks[unit_id][f'mean_angle_g{g}'] = np.nan
-                        consinks[unit_id][f'numspikes_g{g}'] = np.nan
-                        consinks[unit_id][f'platform_g{g}'] = np.nan
-                        continue
-                    elif g == 0 and include_g0:
+                for g in goals_to_include:
+                    if g == 0:
                         reldir_occ_by_pos_cur = reldir_occ_by_pos_g0
                     if g == 1:
                         reldir_occ_by_pos_cur = reldir_occ_by_pos_g1
@@ -208,33 +238,13 @@ def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
             consinks_df = load_pickle(f'consinks_df_m{method}', output_folder)
 
             # make columns for the confidence intervals; place them directly beside the mrl column
-            idx_g0 = consinks_df.columns.get_loc('mrl_g0')
-
-            # if the columns don't exist, insert them
-            if 'ci_95_g1' not in consinks_df.columns:
-                consinks_df.insert(idx_g0 + 1, 'ci_95_g0', np.nan)
-                consinks_df.insert(idx_g0 + 2, 'ci_999_g0', np.nan)
-                consinks_df.insert(idx_g0 + 3, 'sig_g0', np.nan)
-                idx_g1 = consinks_df.columns.get_loc('mrl_g1')
-                consinks_df.insert(idx_g1 + 1, 'ci_95_g1', np.nan)
-                consinks_df.insert(idx_g1 + 2, 'ci_999_g1', np.nan)
-                consinks_df.insert(idx_g1 + 3, 'sig_g1', np.nan)
-                idx_g2 = consinks_df.columns.get_loc('mrl_g2')
-                consinks_df.insert(idx_g2 + 1, 'ci_95_g2', np.nan)
-                consinks_df.insert(idx_g2 + 2, 'ci_999_g2', np.nan)
-                consinks_df.insert(idx_g2 + 3, 'sig_g2', np.nan)
+            consinks_df = ensure_sig_columns(consinks_df, goals_to_include)
 
             for unit_id in tqdm(unit_ids):
-                for g in [0, 1, 2]:
+                for g in goals_to_include:
                     if g == 0:
-                        if not include_g0:
-                            consinks_df.loc[unit_id, f'ci_95_g{g}'] = np.nan
-                            consinks_df.loc[unit_id, f'ci_999_g{g}'] = np.nan
-                            consinks_df.loc[unit_id, f'sig_g{g}'] = np.nan
-                            continue
-                        else:
-                            reldir_occ_by_pos_cur = reldir_occ_by_pos_g0
-                    if g == 1:
+                        reldir_occ_by_pos_cur = reldir_occ_by_pos_g0
+                    elif g == 1:
                         reldir_occ_by_pos_cur = reldir_occ_by_pos_g1
                     elif g == 2:
                         reldir_occ_by_pos_cur = reldir_occ_by_pos_g2
@@ -270,12 +280,13 @@ def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
             except:
                 breakpoint()
             save_pickle(consinks_df, f'consinks_df_m{method}', output_folder)
+        
 
         if 2 in code_to_run:
             print("Calculating mean sink position")
             hcoord, vcoord = get_coords_127sinks(derivatives_base)
             consinks_df = load_pickle(f'consinks_df_m{method}', output_folder)
-            average_sink = calculate_averagesink(consinks_df, hcoord, vcoord, include_g0)
+            average_sink = calculate_averagesink(consinks_df, hcoord, vcoord, goals_to_include)
             save_pickle(average_sink, f'average_sink_m{method}', output_folder)
 
         ######################## PLOT ALL CONSINKS #################################
@@ -289,26 +300,20 @@ def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
             # Check if consinks_df is a dictionary otherwise convert
             consinks_df = load_pickle(f'consinks_df_m{method}', output_folder)
             average_sink = load_pickle(f'average_sink_m{method}', output_folder)
-            plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platforms_trans,  jitter=jitter, plot_dir=output_folder,average_sink = average_sink, include_g0 = include_g0,
-                            plot_name=title)
+            plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platforms_trans,  jitter=jitter, plot_dir=output_folder,average_sink = average_sink, goals_to_include = goals_to_include,
+                            plot_name=title, show_plots = show_plots)
             if len(methods)>1 and method != methods[-1]:
                 plt.close('all')
 
     if 4 in code_to_run:
         # Plot fantail
-        plot_fantail_mean_angles(derivatives_base, methods, output_folder, include_g0=include_g0)
+        plot_fantail_mean_angles(derivatives_base, methods, output_folder, goals_to_include = goals_to_include, show_plots = show_plots)
         
     if 5 in code_to_run:
-        plot_mrl_heatmaps_first_cells(
-            derivatives_base,
-            methods,
-            output_folder,
-            goal=1,
-            n_cells=5,
-            include_g0=include_g0
-        )
-
-def plot_fantail_mean_angles(derivatives_base, methods, output_folder, include_g0=True,
+        pass
+        # still to add
+    export_sig_sinks(methods,output_folder,goals_to_include=goals_to_include)
+def plot_fantail_mean_angles(derivatives_base, methods, output_folder, goals_to_include, show_plots = True,
                              n_bins=12):
     """
     Plot fantail (polar histograms) of mean angles for significant units,
@@ -318,11 +323,8 @@ def plot_fantail_mean_angles(derivatives_base, methods, output_folder, include_g
     session_id = derivatives_base.split(os.sep)[4]
     title = f"Fantail {subject_id}, {session_id}, significant consinks"
 
-    goals = [0, 1, 2]
-    if not include_g0:
-        goals = [1, 2]
 
-    n_goals = len(goals)
+    n_goals = len(goals_to_include)
     fig, axes = plt.subplots(
         len(methods), n_goals,
         figsize=(6 * n_goals, 4*len(methods)),
@@ -335,11 +337,14 @@ def plot_fantail_mean_angles(derivatives_base, methods, output_folder, include_g
     for i_m, method in enumerate(methods):
         consinks_df = load_pickle(f'consinks_df_m{method}', output_folder)
 
-        for i_g, g in enumerate(goals):
+        for i_g, g in enumerate(goals_to_include):
             ax = axes[i_m, i_g]
 
             sig_mask = consinks_df[f'sig_g{g}'] == 'sig'
             angles = consinks_df.loc[sig_mask, f'mean_angle_g{g}'].values
+            if len(angles) == 0:
+                ax.set_title(f'Method {method}, Goal {g}\nNo significant units')
+                continue
             angles = angles[np.isfinite(angles)]
 
             if len(angles) == 0:
@@ -374,7 +379,8 @@ def plot_fantail_mean_angles(derivatives_base, methods, output_folder, include_g
         output_folder, 'fantail_mean_angles_all_methods.png'
     )
     plt.savefig(save_path, dpi=300)
-    plt.show()
+    if show_plots:
+        plt.show()
 
     print(f"Saved fantail plot to {save_path}")
 
@@ -394,7 +400,6 @@ def plot_mrl_heatmaps_first_cells(
 
     hcoord, vcoord = get_coords_127sinks(derivatives_base)
     platforms_trans = translate_positions()
-nn 
 
     for j, method in enumerate(methods):
         consinks_df = load_pickle(f'consinks_df_m{method}', output_folder)
@@ -448,6 +453,7 @@ nn
     print(f"Saved MRL heatmaps to {save_path}")
 if __name__ == "__main__":
     derivatives_base = r"S:\Honeycomb_maze_task\derivatives\sub-002_id-1R\ses-02_date-11092025\all_trials"
-    main(derivatives_base, 'all trials', 'pyramidal', methods = [1, 2], code_to_run=[5], include_g0 = False)
+    goals_to_include = [1,2,3]
+    main(derivatives_base, 'all trials', 'pyramidal', methods = [1, 2], code_to_run=[5])
 
 

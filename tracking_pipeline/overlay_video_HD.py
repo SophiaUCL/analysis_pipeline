@@ -25,7 +25,7 @@ def get_dirs(derivatives_base):
     
     return output_dir, video_data_dir, pos_data_dir
 
-def overlay_video_HD(derivatives_base, trials_to_include):
+def overlay_video_HD(derivatives_base, trials_to_include, short = False):
     """
     Overlays videos with the position of the animal and the head direction
 
@@ -56,14 +56,14 @@ def overlay_video_HD(derivatives_base, trials_to_include):
         print(f"Output path for video overlay: {output_path}")
 
         # Finding video path
-        pattern = f"T{tr}_*.avi"
+        pattern = f"*T{tr}_*.avi"
         files = glob.glob(os.path.join(video_data_dir, pattern))
 
         video_path = files[0]
-        do_overlay(video_path, df, output_path)
+        do_overlay(video_path, df, output_path, short = short)
 
 
-def do_overlay(video_path, df, output_path):
+def do_overlay(video_path, df, output_path, short):
     """ 
     Function overlays the video with the head direction and xy position
 
@@ -97,7 +97,8 @@ def do_overlay(video_path, df, output_path):
         ret, frame = cap.read()
         if not ret:
             break
-
+        if short and frame_idx > 25*30:
+            break
         if frame_idx < len(head_pos_x_col) and pd.notna(head_pos_x_col[frame_idx]) and pd.notna(head_pos_y_col[frame_idx]) and pd.notna(hd_col[frame_idx]):
             x = int(head_pos_x_col[frame_idx])
             y = int(head_pos_y_col[frame_idx])

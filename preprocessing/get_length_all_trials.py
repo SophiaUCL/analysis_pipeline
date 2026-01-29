@@ -4,7 +4,6 @@ import os
 import glob
 import pandas as pd
 import re
-import shutil
 
 
 def get_length_all_trials(rawsession_folder, trials_to_include):
@@ -35,10 +34,13 @@ def get_length_all_trials(rawsession_folder, trials_to_include):
         base = os.path.basename(folder)
         dir_parent = os.path.dirname(folder)
 
-        match = re.search(r'(ses[-_]\d+_g)(\d+)$', base) #Name must be of the form ses- or ses_
+        match = re.search(
+            r'(?P<session>ses[-_]\d+).*?_g(?P<group>\d+)$',
+            base
+        )
+
         if match:
-            prefix, num = match.groups()
-            new_name = f"{prefix}{int(num):02d}"  # pad to 2 digits (e.g. g00, g01, g10)
+            new_name = f"{match['session']}_g{int(match['group']):02d}"
             new_path = os.path.join(dir_parent, new_name)
 
             if new_path != folder:
@@ -58,7 +60,7 @@ def get_length_all_trials(rawsession_folder, trials_to_include):
     for run_folder in run_folders:
 
         basename = os.path.basename(run_folder)
-        match = re.search(r'ses[-_]\d+_g(\d+)', basename)
+        match = re.search(r'ses[-_]\d+.*?_g(\d+)', basename)
         if match:
             group_number = int(match.group(1))
             g_numbers.append(group_number)
@@ -111,6 +113,6 @@ def get_length_all_trials(rawsession_folder, trials_to_include):
     print(f"Saved to {output_path}")
 
 if __name__ == "__main__":
-    rawsession_folder = r"D:\Spatiotemporal_task\rawdata\sub-002_id-1U\ses-01_date-02072025"
-    trials_to_include = np.arange(1,9)
+    rawsession_folder = r"E:\Honeycomb_task_1g\rawdata\sub-001_id-2H\ses-01_date-01282026"
+    trials_to_include = np.arange(1,27)
     get_length_all_trials(rawsession_folder, trials_to_include)

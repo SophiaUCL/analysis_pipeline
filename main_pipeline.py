@@ -15,13 +15,16 @@ from other.find_paths import find_paths
 
 # Currently using processing_pipeline, not processing_pipelin2
 user = "Sophia"
-task = "spatiotemp"
-base_path = r"S:\Spatiotemporal_task"
-subject_number = "002"
-session_number = "05"
-trial_session_name = "rerun_1212" 
-trial_numbers = [1,2,3,4,5,6,7,8,9, 10]
-
+task = "hct"
+base_path = r"E:\Honeycomb_task_1g"
+subject_number = "001"
+session_number = "01"
+trial_session_name = "first_run_2801" 
+trial_numbers = np.arange(1,27)
+if len(trial_numbers) == 1:
+    concat_runs = False
+else:
+    concat_runs = True
 # === Finding the subject folder and session name ===
 derivatives_base, rawsession_folder, rawsubject_folder, session_name = find_paths(base_path, subject_number, session_number, trial_session_name)
 
@@ -36,7 +39,7 @@ config_data = {
         'subject_number': subject_number,
         'session_number': session_number,
         'trial_session_name': trial_session_name,
-        'trial_numbers': trial_numbers
+        'trial_numbers': trial_numbers.tolist()
     }
 }
 # === Adding data to config file ===
@@ -46,11 +49,13 @@ append_config(derivatives_base, config_data)
 # === Zero padding trials ===
 zero_pad_trials(rawsession_folder)
 
-# === Running Spikewrap preprocessing ===
-run_spikewrap(derivatives_base, rawsubject_folder, session_name, concat_runs = True)
-
-# === Post processing ===
-run_spikeinterface(derivatives_base)
-
 # == Obtain length for all of the trials, making a csv out of its === 
 get_length_all_trials(rawsession_folder, trial_numbers)
+
+
+# === Running Spikewrap preprocessing ===
+run_spikewrap(derivatives_base, rawsubject_folder, session_name, concat_runs = concat_runs)
+
+# === Post processing ===
+run_spikeinterface(derivatives_base, True, True)
+

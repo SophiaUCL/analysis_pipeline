@@ -19,6 +19,7 @@ matplotlib.use('Qt5Agg')
 # Running HCT analysis
 def run_HCT(rawsession_folder, derivatives_base):
     """
+    NOTE 27/01/26: OLD, currently not in use, though does give  a nice overview
     Combination of all functions needed for HCT analysis
     
     Maze plots can be found in {derivatives_base}/analysis/maze_behaviour

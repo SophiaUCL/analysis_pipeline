@@ -19,7 +19,6 @@ def restrict_spiketrain_specialbehav(spike_train, rawsession_folder, goal: int):
     if goal not in (0, 1,2):
         raise ValueError("Goal must be 0, 1 or 2") 
     path = os.path.join(rawsession_folder, "task_metadata", "restricted_final.csv")
-
     intervals_df = pd.read_csv(path)
    
     start_col = 2*goal

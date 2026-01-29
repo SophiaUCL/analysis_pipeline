@@ -9,8 +9,8 @@ import matplotlib.pyplot as plt
 
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-from utilities.load_and_save_data import load_pickle, save_pickle
-from calculate_pos_and_dir import get_directions_to_position, get_relative_directions_to_position
+from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
+from HCT_analysis.calculate_pos_and_dir import get_directions_to_position, get_relative_directions_to_position
 
 cm_per_pixel = 0.2
 

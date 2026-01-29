@@ -6,10 +6,11 @@ import matplotlib.pyplot as plt
 import spikeinterface.extractors as se
 import pandas as pd
 import sys
-sys.path.append('C:/Users/Jake/Documents/python_code/rob_maze_analysis_code')
-from utilities.load_and_save_data import load_pickle, save_pickle
-from utilities.trials_utils import get_goal_coordinates
-from utilities.mrl_func import resultant_vector_length
+
+from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
+from HCT_analysis.utilities.trials_utils import get_goal_coordinates
+from HCT_analysis.utilities.mrl_func import resultant_vector_length
+
 from astropy.stats import circmean
 cm_per_pixel = 1
 
@@ -69,125 +70,121 @@ def calculate_vector_fields(spike_rates_by_position_and_direction):
 
 
 
-def plot_vector_fields_all(unit_ids, vector_fields, goal_coordinates, x_centres, y_centres, plot_dir, consink_df):
-    """Plot vector fields for all units. 3x1 plot. First plot: all data, second plot: goal 1 data, third plot: goal 2 data. 
-    Saves plots in plot_dir for each unit. 
-
-    Args:
-        unit_ids (list): List of unit IDs to plot.
-        vector_fields (dict): Dictionary of vector fields for each unit.
-        goal_coordinates (list): List of goal coordinates.
-        x_centres (np.ndarray): X coordinates of the bins.
-        y_centres (np.ndarray): Y coordinates of the bins.
-        plot_dir (str): Directory to save plots.
-        consink_df (pd.DataFrame): DataFrame containing consistency sink information.
-    """
-
-    # Create plot directory if it doesn't exist
-    if not os.path.exists(plot_dir):
-        os.makedirs(plot_dir)
+def plot_vector_fields_all(
+    unit_ids,
+    vector_fields,
+    goal_coordinates,
+    x_centres,
+    y_centres,
+    plot_dir,
+    goals_to_include,
+    methods,
+    output_folder,
+):
+    os.makedirs(plot_dir, exist_ok=True)
 
     for u in unit_ids:
-        fig, ax = plt.subplots(1, 3, figsize=(20, 10))
-        fig.suptitle(f"Vector fields unit {u}", fontsize=24)
+        fig, axes = plt.subplots(
+            1, len(goals_to_include),
+            figsize=(6 * len(goals_to_include), 6),
+            squeeze=False
+        )
+        axes = axes[0]
+        fig.suptitle(f"Vector fields – unit {u}", fontsize=20)
 
-        goals = [0,1,2]
+        for i, g in enumerate(goals_to_include):
+            ax = axes[i]
 
-        for i, g in enumerate(goals): # NOTE: here g0 is G1 going to G2, not all trials
+            # ---------- title ----------
             if g == 0:
-                ax[i].set_title('G1 going to G2', fontsize=20)
+                ax.set_title("G1 → G2")
             else:
-                ax[i].set_title(f'goal {g}', fontsize=20)
-            ax[i].set_xlabel('x position (cm)', fontsize=16)
-            ax[i].set_ylabel('y position (cm)', fontsize=16)
+                ax.set_title(f"Goal {g}")
 
-            # plot the goal positions
+            # ---------- goal circles ----------
             if g > 0:
-                circle = plt.Circle((goal_coordinates[g-1][0], 
-                        goal_coordinates[g-1][1]), 80, color='g', 
-                        fill=False, linewidth=5)
-                ax[i].add_artist(circle)
-            if g == 0:
-                circle = plt.Circle((goal_coordinates[1][0], 
-                        goal_coordinates[1][1]), 80, color='g', 
-                        fill=False, linewidth=5)
-                ax[i].add_artist(circle)
-                circle = plt.Circle((goal_coordinates[0][0], 
-                        goal_coordinates[0][1]), 80, color='g', 
-                        fill=False, linewidth=5)
-                ax[i].add_artist(circle)
-                    
-            
+                gx, gy = goal_coordinates[g - 1]
+                ax.add_patch(plt.Circle((gx, gy), 80, fill=False, color='green', lw=3))
+            else:
+                for gx, gy in goal_coordinates:
+                    ax.add_patch(plt.Circle((gx, gy), 80, fill=False, color='green', lw=3))
+
+            # ---------- vector field ----------
             try:
-                vector_field = vector_fields[g]['units'][int(u)]
-            except:
-                print(f"No vector field for unit {u} and goal {g}")
+                vf = vector_fields[g]['units'][int(u)]
+                ax.quiver(
+                    x_centres,
+                    y_centres,
+                    np.cos(vf),
+                    np.sin(vf),
+                    color='black',
+                    scale=10
+                )
+            except KeyError:
                 continue
 
-            # plot vector field
-            ax[i].quiver(x_centres, y_centres, np.cos(vector_field), np.sin(vector_field), color='k', scale=10)
-        
-            # flip y axis
-            ax[i].invert_yaxis()
+            ax.invert_yaxis()
+            ax.set_aspect('equal')
+            ax.tick_params(labelsize=10)
 
-            # increase the range of the axes by 10% to make room for the arrows
-            x_lim = ax[i].get_xlim()
-            y_lim = ax[i].get_ylim()
-            x_range = x_lim[1] - x_lim[0]
-            y_range = y_lim[1] - y_lim[0]
-            ax[i].set_xlim(x_lim[0] - 0.1*x_range, x_lim[1] + 0.1*x_range)
-            ax[i].set_ylim(y_lim[0] - 0.1*y_range, y_lim[1] + 0.1*y_range)
-
+            # ---------- consinks (all methods) ----------
             if g > 0:
-                consink_row = consink_df.loc[u]
+                y_text = 0.95
+                y_step = 0.08
 
-                mrl = consink_row[f'mrl_g{g}']
-                consink_pos = consink_row[f'position_g{g}']
-                consink_angle = consink_row[f'mean_angle_g{g}']
-                ci_95 = consink_row[f'ci_95_g{g}']
-                if consink_angle > np.pi:
-                    consink_angle = consink_angle - 2*np.pi
-                
-                # plot a filled circle at the consink position
-                if mrl > ci_95:
-                    consink_color = 'r'
-                else: # color is gray
-                    consink_color = 'gray'
+                for k, m in enumerate(methods):
+                    consinks_df = load_pickle(f'consinks_df_m{m}', output_folder)
+                    row = consinks_df.loc[u]
 
-                circle = plt.Circle((consink_pos[0], 
-                    consink_pos[1]), 50, color=consink_color, 
-                    fill=True)
-                ax[i].add_artist(circle)      
-            
-                # add text with mrl, ci_95, ci_999
-                ax[i].text(400, 1800, f'mrl: {mrl:.2f}\nci_95: {ci_95:.2f}\nangle: {np.rad2deg(consink_angle):.2f}', fontsize=16)
-                #ax[i].text(0, 2100, f'mrl: {mrl:.2f}\nci_999: {ci_999:.2f}\nangle: {consink_angle:.2f}', fontsize=16)
-                
-            # set font size of axes
-            ax[i].tick_params(axis='both', which='major', labelsize=14)
-            """
-            # get the axes values
-            x_ticks = ax[i].get_xticks()
-            y_ticks = ax[i].get_yticks()
+                    mrl = row[f'mrl_g{g}']
+                    ci95 = row[f'ci_95_g{g}']
+                    pos = row[f'position_g{g}']
+                    ang = row[f'mean_angle_g{g}']
 
-            # convert the axes values to cm
-            x_ticks_cm = x_ticks * cm_per_pixel
-            y_ticks_cm = y_ticks * cm_per_pixel
+                    if not np.isfinite(mrl) or pos is None:
+                        continue
 
-            # set the axes values to cm
-            ax[i].set_xticklabels(x_ticks_cm)
-            ax[i].set_yticklabels(y_ticks_cm)
+                    if ang > np.pi:
+                        ang -= 2 * np.pi
 
-            """
+                    is_sig = np.isfinite(ci95) and mrl > ci95
+                    color = 'red' if is_sig else 'grey'
 
-            # set the axes to have identical scales
-            ax[i].set_aspect('equal')        
+                    style = METHOD_STYLE[m]
 
-        fig.savefig(os.path.join(plot_dir, f'vector_fields_unit_{u}.png'))
+                    # ---- marker ----
+                    ax.scatter(
+                        pos[0],
+                        pos[1],
+                        marker=style['marker'],
+                        s=260,
+                        facecolors=color,
+                        edgecolors='black',
+                        linewidths=1.2,
+                        zorder=6,
+                        label=style['label'] if i == 0 else None
+                    )
+
+                    # ---- text ----
+                    ax.text(
+                        0.02,
+                        y_text - k * y_step,
+                        f"M{m}: mrl={mrl:.2f}, ci95={ci95:.2f}, θ={np.rad2deg(ang):.1f}°",
+                        transform=ax.transAxes,
+                        fontsize=11,
+                        color=color,
+                        va='top'
+                    )
+
+            if i == 0:
+                ax.legend(frameon=False, loc='lower left')
+
+        fig.tight_layout(rect=[0, 0, 1, 0.94])
+        fig.savefig(os.path.join(plot_dir, f"vector_fields_unit_{u}.png"), dpi=300)
         plt.close(fig)
+
         
-        
-def main(derivatives_base, rawsession_folder):
+def main(derivatives_base, methods = [1,2,3], goals_to_include = [0,1,2]):
     """
     For each unit, creates a 3x1 subplot of vector fields for all trials, goal 1 trials, and goal 2 trials.
     run get_directional_occupancy_by_pos.py first to generate the necessary data.
@@ -197,7 +194,8 @@ def main(derivatives_base, rawsession_folder):
         
     Note! Goal coordinates is not correctly defined yet
     """
-    
+    rawsession_folder= derivatives_base.replace("\derivatives", "\rawdata")
+    rawsession_folder =os.path.dirname(rawsession_folder)
     # Loading spike data
     kilosort_output_path = os.path.join(derivatives_base, "ephys", "concat_run","sorting", "sorter_output" )
     sorting = se.read_kilosort(
@@ -213,22 +211,22 @@ def main(derivatives_base, rawsession_folder):
         pos_data['hd'] = np.deg2rad(pos_data['hd'])
 
 
-    output_folder = os.path.join(derivatives_base, 'analysis', 'cell_characteristics', 'unit_features', 'spatial_features', 'consink_data_newmethod')
+    output_folder = os.path.join(derivatives_base, 'analysis', 'cell_characteristics',  'spatial_features', 'consinks')
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
 
     goal_coordinates = get_goal_coordinates(derivatives_base, rawsession_folder)
-    consink_df = load_pickle('consinks_df', output_folder)
     
-    
-    ############# CALCULATING VECTOR FIELDS ##############3
     vector_fields = {}
     mean_resultant_lengths = {}
+        
+
+    ############# CALCULATING VECTOR FIELDS ##############3
     
 
     # Now per goal
-    for g in [0, 1,2]:# AGAIN, We're not doing full trial here
+    for g in goals_to_include:# AGAIN, We're not doing full trial here
         print("Calculating vector fields for goal ", g)
         spike_rates_by_position_and_direction_by_goal = load_pickle( f'spike_rates_by_position_and_direction_g{g}', output_folder)
         vector_fields[g], mean_resultant_lengths[g] = calculate_vector_fields(spike_rates_by_position_and_direction_by_goal)
@@ -238,19 +236,17 @@ def main(derivatives_base, rawsession_folder):
     save_pickle(mean_resultant_lengths, 'mean_resultant_lengths', output_folder)
     
     # Plotting
-    plot_dir = os.path.join(derivatives_base, 'analysis', 'cell_characteristics', 'unit_features', 'spatial_features', 'vector_fields')
+    plot_dir = os.path.join(derivatives_base, 'analysis', 'cell_characteristics', 'spatial_features', 'vector_fields')
     if not os.path.exists(plot_dir):
         os.makedirs(plot_dir)
     print(f"Saving to {plot_dir}")
-    x_bins = vector_fields[0]['x_bins']
+    x_bins = vector_fields[g]['x_bins']
     x_centres = x_bins[:-1] + np.diff(x_bins)/2
-    y_bins = vector_fields[0]['y_bins']
+    y_bins = vector_fields[g]['y_bins']
     y_centres = y_bins[:-1] + np.diff(y_bins)/2
-    plot_vector_fields_all(unit_ids, vector_fields, goal_coordinates, x_centres, y_centres, plot_dir, consink_df)
+    
+    plot_vector_fields_all(unit_ids,vector_fields,goal_coordinates,x_centres,y_centres,plot_dir,goals_to_include,methods,output_folder)
 
-    consink_csv_path = os.path.join(output_folder, 'consinks_df.csv')
-    consink_df.to_csv(consink_csv_path, index=True)
-    print(f"Saved consink_df as CSV to: {consink_csv_path}")
     
 
 
