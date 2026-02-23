@@ -1,123 +1,70 @@
 
 from matplotlib.widgets import PolygonSelector
-from matplotlib.path import Path
+from matplotlib.path import Path as MplPath
 import numpy as np
-import os
-import pandas as pd
 import spikeinterface.extractors as se
 import matplotlib.pyplot as plt
-from spatial_functions import get_ratemaps
-from get_sig_cells import get_sig_cells
-import json
-import warnings
-from astropy.stats import circmean
-
-def mask_posdata(pos_data, mask):
-    """
-    Masks positional data
-
-    Args:
-        pos_data: array with x, y, hd, x_bin and y_bin
-        mask: 2D boolean
-    returns hd_masked
-    """
-    xsize, ysize = mask.shape
-
-    x_bin = pos_data["x_bin"].to_numpy()
-    y_bin = pos_data["y_bin"].to_numpy()
-    hd = pos_data["hd"].to_numpy()
-
-    valid = (
-        (x_bin >= 0) & (x_bin < xsize) &
-        (y_bin >= 0) & (y_bin < ysize)
-    )
-
-    valid_mask = np.zeros_like(valid, dtype=bool)
-    valid_indices = np.where(valid)
-    valid_mask[valid_indices] = mask[x_bin[valid], y_bin[valid]]
-
-    # Return masked hd values (ignore NaNs)
-    return hd[valid_mask & ~np.isnan(hd)]
+from utils.spatial_features_utils import get_spike_train_frames, get_ratemaps, get_limits, get_outline, get_posdata, get_occupancy_time
+from utils.spatial_features_plots import plot_spikemap_interactive_rmap, plot_rmap,plot_directional_firingrate
+from pathlib import Path
                     
     
-def plot_rmap_interactive(derivatives_base, unit_id,  frame_rate = 25, sample_rate = 30000):
+def plot_rmap_interactive(derivatives_base: Path, unit_id: int,  frame_rate: int = 25, sample_rate: int = 30000):
     """ 
-    Makes a plot for each unit with its ratemap (left), occupancy (middle) and directional firing rate (right).
-    User adjustable
-
-    Inputs: derivatives base
+    Interactively define a spatial subregion on a ratemap and examine how a neuron’s directional tuning changes when restricted to that region.
+    Plots
+    -----
+    Left: ratemap, which you can overlay a polygon on
+    Center-left: spikemap, showing which area was selected (red)
+    Center-right: HD distribution. HD spikes in the area divided by animal HD distribution over the whole trial
+    Right: HD distribution. HD spikes in the area divided by animal HD distribution in that area
+    
+    Inputs
+    -------
+    derivatives_base (Path): Path to derivatives folder
+    unit_id (int): unit that we're looking at
+    frame_rate (int: 25): frame rate of camera 
+    sample_rate (int: 30000): sample rate of recording
     
     """
     # Load data files
-    kilosort_output_path = os.path.join(derivatives_base, 'ephys', "concat_run","sorting", "sorter_output" )
+    kilosort_output_path = derivatives_base/ 'ephys'/ "concat_run"/"sorting"/ "sorter_output" 
     sorting = se.read_kilosort(
         folder_path = kilosort_output_path
     )
    
-    # Limits
-    limits_path = os.path.join(derivatives_base, "analysis", "maze_overlay", "limits.json")
-    with open(limits_path) as json_data:
-        limits = json.load(json_data)
-        json_data.close()
-    
-    xmin = limits['x_min']
-    xmax = limits['x_max']
-    ymin = limits['y_min']
-    ymax = limits['y_max']
-    
-    # ---- Load maze outline coordinates ----
-    outline_path = os.path.join(derivatives_base, "analysis", "maze_overlay", "maze_outline_coords.json")
-    if os.path.exists(outline_path):
-        with open(outline_path, "r") as f:
-            outline = json.load(f)
-        outline_x = outline["outline_x"]
-        outline_y = outline["outline_y"]
-    else:
-        print("⚠️ Maze outline JSON not found; skipping red outline overlay.")
-        outline_x, outline_y = None, None
+    # Limits and outline
+    xmin, xmax, ymin, ymax = get_limits(derivatives_base)
+    outline_x, outline_y = get_outline(derivatives_base)
         
-    
     # Get directory for the positional data
-    pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', 'XY_HD_alltrials.csv')
-    pos_data = pd.read_csv(pos_data_path)
-
-    x = pos_data.iloc[:, 0].to_numpy()
-    y = pos_data.iloc[:, 1].to_numpy()
-    hd = pos_data.iloc[:, 2].to_numpy()
+    x, y, hd, pos_data = get_posdata(derivatives_base, method = "ears")
     
-        
+    
     # Loop over units
     print("Plotting ratemaps and hd")
 
     # Obtaining hd for this trial how much the animal sampled in each bin
     num_bins = 24
-    hd_filtered = hd[~np.isnan(hd)]
-    #hd_filtered= np.deg2rad(hd_filtered)
-    occupancy_counts, _ = np.histogram(hd_filtered, bins=num_bins, range = [-np.pi, np.pi])
-    occupancy_time = occupancy_counts / frame_rate 
-
+    occupancy_time = get_occupancy_time(hd, frame_rate, num_bins = num_bins)
 
     # Load spike data
-    spike_train_unscaled = sorting.get_unit_spike_train(unit_id=unit_id)
-    spike_train_pre = np.round(spike_train_unscaled*frame_rate/sample_rate) # trial data is now in frames in order to match it with xy data
-    spike_train = [np.int32(el) for el in spike_train_pre if el < len(x)]  # Ensure spike train is within bounds of x and y
+    spike_train = get_spike_train_frames(sorting, unit_id, x, sample_rate, frame_rate)
     
+    # Mask variables
     input = 'c'
-    
     mask = None 
     
     # Get original ratemap
     rmap, x_edges, y_edges = get_ratemaps(spike_train, x, y, 3, binsize=36, stddev=25)
     
+    # Binning pos_data
     x_bin = np.digitize(x, x_edges) - 1
     y_bin = np.digitize(y, y_edges) - 1
-    
     mask_x = np.isnan(x)
     mask_y = np.isnan(y)
-    
     y_bin[mask_y] = -1
     x_bin[mask_x] = -1
-    
     pos_data['x_bin'] = x_bin
     pos_data['y_bin'] = y_bin
      
@@ -145,56 +92,15 @@ def plot_rmap_interactive(derivatives_base, unit_id,  frame_rate = 25, sample_ra
             spike_train_filt = spike_train
             
         is_filt = np.isin(spike_train, spike_train_filt)
-        
-        im = axs[0].imshow(rmap.T, 
-                cmap='viridis', 
-                interpolation = None,
-                origin='lower', 
-                aspect='auto', 
-                extent=[x_edges[0], x_edges[-1], y_edges[0], y_edges[-1]])
 
-
-        axs[0].set_title(f"{len(spike_train_filt)}/{len(spike_train)}")
-        axs[0].set_xlim(xmin, xmax)
-        axs[0].set_ylim(ymax, ymin)
-        axs[0].set_aspect('equal')
-        if outline_x is not None and outline_y is not None:
-                axs[0].plot(outline_x, outline_y, 'r-', lw=2, label='Maze outline')
-        #fig.colorbar(im, ax=axs[0], label='Firing rate')
-        fig.colorbar(im, ax=axs[0], label='Firing rate')
+        # 1. PLot rmap
+        plot_rmap(rmap, xmin, xmax, ymin, ymax, x_edges, y_edges, outline_x, outline_y, ax = axs[0], fig = fig, title = f"{len(spike_train_filt)}/{len(spike_train)}")
 
         # 2. spikemap
-        x_spikes = x[spike_train]
-        y_spikes = y[spike_train]
-        hd_spikes = hd[spike_train]
-
-
-        valid = ~np.isnan(x_spikes) & ~np.isnan(y_spikes) & ~np.isnan(hd_spikes)
-        x_spikes = x_spikes[valid]
-        y_spikes = y_spikes[valid]
-        hd_spikes = hd_spikes[valid]
-        is_filt = is_filt[valid]  
-
-        #u = np.cos(np.deg2rad(hd_spikes))
-        #v = np.sin(np.deg2rad(hd_spikes))
-        u = np.cos(hd_spikes)
-        v = np.sin(hd_spikes)
-
-        # Assign colors efficiently
-        colors = np.where(is_filt, 'blue', 'red')
-
-        # Plot
-        axs[1].quiver(x_spikes, y_spikes, u, v, color=colors, scale = 30)
-        axs[1].set_xlim(xmin, xmax)
-        axs[1].set_ylim(ymax, ymin)
-        axs[1].set_aspect('equal')
-        if outline_x is not None and outline_y is not None:
-                axs[1].plot(outline_x, outline_y, 'r-', lw=2, label='Maze outline')
-        axs[1].set_title('Blue: within interval. Red: outside interval')
+        plot_spikemap_interactive_rmap(spike_train, x, y, hd, is_filt, xmin, xmax, ymin, ymax, ax = axs[1], outline_x = outline_x, outline_y = outline_y)
         
-        # Plot HD
+        # 3 & 4.  Plot HD
         # Getting the spike times and making a histogram of them
-        
         spikes_hd = hd[spike_train_filt]
         spikes_hd = spikes_hd[~np.isnan(spikes_hd)]
         #spikes_hd_rad = np.deg2rad(spikes_hd)
@@ -213,53 +119,12 @@ def plot_rmap_interactive(derivatives_base, unit_id,  frame_rate = 25, sample_ra
 
         # MRL adn significance
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-        if False:
-            MRL = resultant_vector_length(bin_centers, w = direction_firing_rate)
-            perc_95, perc_99, MRL_values, shift_value = get_sig_cells(spike_train, np.deg2rad(hd),0, len(hd) -1, occupancy_time )
-            angle = circmean(bin_centers, weights=direction_firing_rate)
-            
-            if MRL> perc_99:
-                text = f'MRL: {MRL:.2f}**'
-                print(perc_99)
-            elif MRL > perc_95:
-                text = f'MRL: {MRL:.2f}*'
-                print(perc_95)
-            else:
-                text = f'MRL: {MRL:.2f}, ns'
-        # Plotting
-        width = np.diff(bin_centers)[0]
-        axs[2].bar(
-            bin_centers,
-            direction_firing_rate,
-            width=width,
-            bottom=0.0,
-            alpha=0.8
-        )
-        if False:
-            max_rate = np.nanmax(direction_firing_rate)
-            axs[2].plot(
-                [angle, angle],               # theta values
-                [0, max_rate],                # r values (from center to max)
-                color='red',                  # choose your color
-                linewidth=2,                  # line thickness
-                label='Mean direction'
-            )
-
-            # Optional: add text and legend
-            axs[2].text(0.05, 1.05, text, transform=axs[2].transAxes)
-            axs[2].legend(loc='upper right', bbox_to_anchor=(1.2, 1.1))
-
+        plot_directional_firingrate(bin_centers, direction_firing_rate, ax = axs[2], title = "HD in area, divided by animal HD distr in whole trial")
+    
         # Plotting
         fig.delaxes(axs[3])
         axs[3] = fig.add_subplot(1,4,4, polar=True)
-        width = np.diff(bin_centers)[0]
-        axs[3].bar(
-            bin_centers,
-            direction_firing_rate_masked,
-            width=width,
-            bottom=0.0,
-            alpha=0.8
-        )
+        plot_directional_firingrate(bin_centers, direction_firing_rate_masked, ax = axs[3], title = "HD in area, divided by animal HD distr in area")
         
         plt.tight_layout()
         plt.show(block=False)   # show figure but don’t block execution yet
@@ -286,7 +151,7 @@ def select_region(data, ax, x_edges, y_edges):
         X, Y = np.meshgrid(x_lin, y_lin)
 
         points = np.vstack((X.ravel(), Y.ravel())).T
-        path = Path(verts)
+        path = MplPath(verts)
         mask = path.contains_points(points).reshape((nx, ny)).T  # transpose back
         mask_container['mask'] = mask
         mask_container['done'] = True
@@ -309,70 +174,39 @@ def select_region(data, ax, x_edges, y_edges):
     return mask_container['mask']
 
 
-        
-def resultant_vector_length(alpha, w=None, d=None, axis=None,
-                            axial_correction=1, ci=None, bootstrap_iter=None):
+def mask_posdata(pos_data, mask):
     """
-    Copied from Pycircstat documentation
-    Computes mean resultant vector length for circular data.
+    Masks positional data
 
-    This statistic is sometimes also called vector strength.
-
-    :param alpha: sample of angles in radians
-    :param w: number of incidences in case of binned angle data
-    :param ci: ci-confidence limits are computed via bootstrapping,
-               default None.
-    :param d: spacing of bin centers for binned data, if supplied
-              correction factor is used to correct for bias in
-              estimation of r, in radians (!)
-    :param axis: compute along this dimension, default is None
-                 (across all dimensions)
-    :param axial_correction: axial correction (2,3,4,...), default is 1
-    :param bootstrap_iter: number of bootstrap iterations
-                          (number of samples if None)
-    :return: mean resultant length
-
-    References: [Fisher1995]_, [Jammalamadaka2001]_, [Zar2009]_
+    Args:
+        pos_data: array with x, y, hd, x_bin and y_bin
+        mask: 2D boolean
+    returns hd_masked
     """
-    if axis is None:
-        axis = 0
-        alpha = alpha.ravel()
-        if w is not None:
-            w = w.ravel()
+    xsize, ysize = mask.shape
 
-    cmean = _complex_mean(alpha, w=w, axis=axis,
-                          axial_correction=axial_correction)
+    x_bin = pos_data["x_bin"].to_numpy()
+    y_bin = pos_data["y_bin"].to_numpy()
+    hd = pos_data["hd"].to_numpy()
 
-    # obtain length
-    r = np.abs(cmean)
+    valid = (
+        (x_bin >= 0) & (x_bin < xsize) &
+        (y_bin >= 0) & (y_bin < ysize)
+    )
 
-    # for data with known spacing, apply correction factor to correct for bias
-    # in the estimation of r (see Zar, p. 601, equ. 26.16)
-    if d is not None:
-        if axial_correction > 1:
-            warnings.warn("Axial correction ignored for bias correction.")
-        r *= d / 2 / np.sin(d / 2)
-    return r
+    valid_mask = np.zeros_like(valid, dtype=bool)
+    valid_indices = np.where(valid)
+    valid_mask[valid_indices] = mask[x_bin[valid], y_bin[valid]]
 
-
-def _complex_mean(alpha, w=None, axis=None, axial_correction=1):
-    # Copied from picircstat documentation
-    if w is None:
-        w = np.ones_like(alpha)
-    alpha = np.asarray(alpha)
-
-    assert w.shape == alpha.shape, "Dimensions of data " + str(alpha.shape) \
-                                   + " and w " + \
-        str(w.shape) + " do not match!"
-
-    return ((w * np.exp(1j * alpha * axial_correction)).sum(axis=axis) /
-            np.sum(w, axis=axis))       
+    # Return masked hd values (ignore NaNs)
+    return hd[valid_mask & ~np.isnan(hd)]
+          
 
 
 
 if __name__ == "__main__":
-    derivatives_base = r"S:\Honeycomb_maze_task\derivatives\sub-002_id-1R\ses-02_date-11092025\all_trials"
-    unit_id = 61
-    plot_rmap_interactive(derivatives_base, unit_id)
+    derivatives_base = r"E:\Honeycomb_task_1g\derivatives\sub-001_id-2H\ses-01_date-01282026\first_run_2801"
+    unit_id = 228
+    plot_rmap_interactive(Path(derivatives_base), unit_id)
 
 

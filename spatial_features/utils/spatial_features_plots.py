@@ -1,10 +1,15 @@
 import numpy as np
 import pandas as pd
+from matplotlib.axes._axes import Axes 
+from matplotlib.figure import Figure
+from matplotlib.colors import ListedColormap
 
-def plot_rmap(rmap, xmin, xmax, ymin, ymax, x_edges, y_edges, outline_x, outline_y, ax, fig, title = None):
+cmap_Cr = ListedColormap(["#384682", "#578da1", "#62b378", "#e6dc77", '#f0754d'])
+def plot_rmap(rmap: np.ndarray, xmin: float, xmax: float, ymin: float, ymax: float, x_edges: np.ndarray, y_edges: np.ndarray, outline_x: np.ndarray | None, outline_y: np.ndarray | None, ax: Axes, fig: Figure, title: str = None) -> None:
     """ Plots ratemap"""
+
     im = ax.imshow(rmap.T, 
-                cmap='viridis', 
+                cmap=cmap_Cr, 
                 interpolation = None,
                 origin='lower', 
                 aspect='auto', 
@@ -31,8 +36,9 @@ def plot_spikes_spatiotemp(spike_train_this_epoch, x, y, epoch_end, frame_rate, 
     if title is not None:
         ax.set_title(title)
     
-def plot_occupancy(x, y, xmin, xmax, ymin, ymax, outline_x, outline_y, frame_rate, ax, fig):
+def plot_occupancy(x: np.ndarray, y: np.ndarray,  xmin: float, xmax: float, ymin: float, ymax: float, outline_x: np.ndarray | None, outline_y: np.ndarray | None,  frame_rate: int, ax: Axes, fig: Figure):
     """ Plots the animal occupancy. Doesn't visualise bins that have occupancy above mean occupancy +stdv"""
+
     # Remove nans
     x_no_nan =  x[~pd.isna(x)]
     y_no_nan = y[~pd.isna(y)]
@@ -44,7 +50,7 @@ def plot_occupancy(x, y, xmin, xmax, ymin, ymax, outline_x, outline_y, frame_rat
     # Get mean and stdv for points with occupancy above 0
     hm_nozero = heatmap_data[heatmap_data != 0]
     mean_hm = np.mean(hm_nozero)
-    std_hm = np.std(hm_nozero)
+    std_hm = np.std(hm_nozero) 
     
     # Threshold occupancy as to only show occupancy above threshold
     threshold = mean_hm + std_hm
@@ -53,7 +59,7 @@ def plot_occupancy(x, y, xmin, xmax, ymin, ymax, outline_x, outline_y, frame_rat
     # visualize
     im = ax.imshow(
             heatmap_data.T,
-            cmap='viridis',
+            cmap=cmap_Cr,
             interpolation=None,
             origin='upper',
             aspect='auto',
@@ -65,7 +71,7 @@ def plot_occupancy(x, y, xmin, xmax, ymin, ymax, outline_x, outline_y, frame_rat
     ax.set_title('Occupancy full session')
     ax.set_aspect('equal')
     
-def plot_directional_firingrate(bin_centers, direction_firing_rate, ax, title = None, MRL = None, percentiles_95_value = None):
+def plot_directional_firingrate(bin_centers: np.ndarray, direction_firing_rate: np.ndarray, ax: Axes, title: str = None, MRL: float = None, percentiles_95_value: float = None):
     """ PLots directional firing rate"""
     # Plotting
     width = np.diff(bin_centers)[0]
@@ -94,7 +100,7 @@ def plot_directional_firingrate(bin_centers, direction_firing_rate, ax, title = 
     if title is not None:
         ax.set_title(title)
 
-def plot_roseplots(filtered_df,behaviour_df, arms_dir, arms_angles_start, sum_count_bin, bin_edges,e,  tr, ax):
+def plot_roseplots(filtered_df: pd.DataFrame,behaviour_df: pd.DataFrame, arms_dir: np.ndarray | list, arms_angles_start: np.ndarray | list, sum_count_bin: np.ndarray, bin_edges: np.ndarray,e: int,  tr: int, ax: Axes) -> None:
     """ Makes one subplot for roseplot"""
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
     bin_centers = np.deg2rad(bin_centers)
@@ -139,7 +145,7 @@ def plot_roseplots(filtered_df,behaviour_df, arms_dir, arms_angles_start, sum_co
         ax.fill_between(theta, 0, r, color='pink', alpha=0.5, zorder=0)
 
 
-def add_arm_overlay_roseplot(behaviour_df, tr, trials_to_include, ax, fig):
+def add_arm_overlay_roseplot(behaviour_df: pd.DataFrame, tr:int, trials_to_include: np.ndarray | list, ax: Axes, fig: Figure) -> None:
     """ Overlays whether arm was correct or not"""
     if behaviour_df.iloc[tr-1, 3] == "Y":
         text = "Correct"
@@ -152,3 +158,35 @@ def add_arm_overlay_roseplot(behaviour_df, tr, trials_to_include, ax, fig):
     ax = fig.add_subplot(len(trials_to_include), 5, (tr-1)*5 + 5) 
     ax.axis('off') 
     ax.text(0.0, 0.5, text, fontsize=11, va='center', ha='left', wrap=True, c= c)
+    
+
+def plot_spikemap_interactive_rmap(spike_train: np.ndarray | list, x: np.ndarray, y: np.ndarray, hd: np.ndarray, is_filt: np.ndarray, xmin: float, xmax: float, ymin: float, ymax: float, ax: Axes, outline_x = None, outline_y = None):
+    """ Used in interactive rmap plot"""
+    
+    x_spikes = x[spike_train]
+    y_spikes = y[spike_train]
+    hd_spikes = hd[spike_train]
+
+
+    valid = ~np.isnan(x_spikes) & ~np.isnan(y_spikes) & ~np.isnan(hd_spikes)
+    x_spikes = x_spikes[valid]
+    y_spikes = y_spikes[valid]
+    hd_spikes = hd_spikes[valid]
+    is_filt = is_filt[valid]  
+
+    u = np.cos(hd_spikes)
+    v = np.sin(hd_spikes)
+
+    # Assign colors efficiently
+    colors = np.where(is_filt, 'blue', 'red')
+
+    # Plot
+    ax.quiver(x_spikes, y_spikes, u, v, color=colors, scale = 30)
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymax, ymin)
+    ax.set_aspect('equal')
+    if outline_x is not None and outline_y is not None:
+            ax.plot(outline_x, outline_y, 'r-', lw=2, label='Maze outline')
+    ax.set_title('Blue: within interval. Red: outside interval')
+        
+        

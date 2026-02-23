@@ -1,13 +1,12 @@
 import subprocess
 import pathlib
 import os
-import numpy as np
-import json
 import sys
 import shutil
-
+from pathlib import Path
 print(">>> Script started")
 sys.stdout.flush()
+
 
 """
 SAME AS OTHER SCRIPT, BUT THIS ONE YOU CAN DIRECTLY RUN IN THE SLEAP ENVIRONMENT
@@ -37,19 +36,18 @@ then just open a command line terminal activate the environment and type: python
 --------
 """
 
-def call_inference_on_all(derivatives_base, centroid_model_folder, centered_model_folder,  all_trials = True, ext=".avi"):
+def call_inference_on_all(derivatives_base: Path, centroid_model_folder: Path, centered_model_folder: Path,  all_trials: bool = True, ext: str=".avi"):
     """
     Runs centroid model and centered model on the videos found in the rawdata/tracking folder
     Saves inference results in derivatives_base\analysis\spatial_behav_data\inference_results
     """
     # Loading folders
-    rawsession_folder = derivatives_base.replace("derivatives", "rawdata")
-    rawsession_folder = os.path.dirname(rawsession_folder)
-    video_folder = os.path.join(rawsession_folder, 'tracking')
-    dest_folder = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'inference_results')
-    if not os.path.exists(dest_folder):
-        os.makedirs(dest_folder)
-    source_folder = pathlib.Path(video_folder)
+    rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent
+    video_folder = rawsession_folder/'tracking'
+    dest_folder = derivatives_base/'analysis'/'spatial_behav_data'/'inference_results'
+    if not dest_folder.exists():
+        dest_folder.mkdir(parents=True, exist_ok=True)
+    source_folder = video_folder
     
     # Loading videopaths
     fpaths = list(source_folder.rglob(f"*{ext}"))
@@ -64,8 +62,7 @@ def call_inference_on_all(derivatives_base, centroid_model_folder, centered_mode
     return fpaths
 
 
-def call_inference(fpath, dest_folder, centered_model_folder, centroid_model_folder):
-    fpath = pathlib.Path(fpath)
+def call_inference(fpath: Path, dest_folder: Path, centered_model_folder: Path, centroid_model_folder: Path):
     dest_path = dest_folder / f"{fpath.stem}_inference.slp"
 
     if dest_path.exists():
@@ -94,8 +91,8 @@ def call_inference(fpath, dest_folder, centered_model_folder, centroid_model_fol
 if __name__ == "__main__":
     # Currently running in sleap_new environment from Sopia's computer, and sleap environment on Eylon's
     #derivatives_base = r"S:\Honeycomb_maze_task\derivatives\sub-003_id-2F\ses-02_date-18092025\all_trials"
-    derivatives_base = r"E:\Honeycomb_task_1g\derivatives\sub-001_id-2H\ses-01_date-01282026\first_run_2801"
+    derivatives_base = r"E:\Honeycomb_task_1g\derivatives\sub-001_id-2H\ses-02_date-12022026\first_run_1302"
     centroid_model_folder = r"\\ceph-gw02.hpc.swc.ucl.ac.uk\okeefe\Eylon\SLEAP_NEWCAMERA_21072025\models\latest_model\251003_111713.centroid.n=2405"
     centered_model_folder = r"\\ceph-gw02.hpc.swc.ucl.ac.uk\okeefe\Eylon\SLEAP_NEWCAMERA_21072025\models\251003_132856.centered_instance.n=2405"
     all_trials = True  # If you just want to test run it, then set this to False
-    call_inference_on_all(derivatives_base, centroid_model_folder, centered_model_folder, all_trials = all_trials)
+    call_inference_on_all(Path(derivatives_base), Path(centroid_model_folder), Path(centered_model_folder), all_trials = all_trials)

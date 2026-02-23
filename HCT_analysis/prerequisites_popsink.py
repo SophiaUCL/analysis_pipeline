@@ -4,7 +4,6 @@ import os
 from utilities.create_intervals_specialbehav import create_intervals_specialbehav
 from utilities.restrict_posdata_specialbehav import restrict_posdata_specialbehav
 from utilities.create_sinks import create_sinks_and_dirbins
-from utilities.plot_occupancy_pertrial import occupancy_each_trial
 from find_popsink_newmethod import calculate_popsink
 
 def check_restricted_df(rawsession_folder):
@@ -49,7 +48,6 @@ def prerequisites_popsink(derivatives_base, trials_to_include):
     
     # Creates XY_HD_goal{goal}_trials and XY_HD_allintervals.csv and shows the heatmap
     #restrict_posdata_specialbehav(derivatives_base, rawsession_folder,  frame_rate = 25) # NOTE: this one needs cleaning up
-    #occupancy_each_trial(derivatives_base, trials_to_include, show_plots = True, frame_rate = 25)
     
     # Create sink files and direction bins for hd
     # Also saves them to derivatives_base/analysis/spatial_features/{folder_name}/sink_bins.pkl

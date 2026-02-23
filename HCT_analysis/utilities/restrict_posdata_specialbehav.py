@@ -1,25 +1,28 @@
 import os
 import numpy as np
 import pandas as pd
-from matplotlib.path import Path
+from pathlib import Path
 import matplotlib.pyplot as plt
 import json
 #from utilities.add_platforms_any_df import add_platforms_to_csv
 
-def restrict_posdata_specialbehav(derivatives_base, goals_to_include, frame_rate = 25):
+def restrict_posdata_specialbehav(derivatives_base: Path, goals_to_include: list = [0,1,2], show_plots: bool = True, frame_rate: int = 25):
     """
     Restricts the pos_data to the intervals of the goal.
     
-    Args:
-        derivatives_base: Path to derivatives folder
+    Inputs
+    ------
+    derivatives_base (Path): Path to derivatives folder
+    goals_to_include (list: [0,1,2]): Goals included in analysis
+    show_plots (bool: False): Whether to show the plots
+    frame_rate (int: 25)
 
     Returns:
         DataFrame: restricted position data
     """
-    rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
-    rawsession_folder = os.path.dirname(rawsession_folder)
+    rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent
 
-    pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', 'XY_HD_w_platforms.csv')
+    pos_data_path = derivatives_base/'analysis'/'spatial_behav_data'/'XY_and_HD'/'XY_HD_w_platforms.csv'
     pos_data = pd.read_csv(pos_data_path)
     
     # Limits
@@ -44,7 +47,7 @@ def restrict_posdata_specialbehav(derivatives_base, goals_to_include, frame_rate
         print(" Maze outline JSON not found; skipping red outline overlay.")
         outline_x, outline_y = None, None
         
-    for goal in [0,1,2]:
+    for goal in goals_to_include:
         pos_data_org = pos_data.copy()
         
         
@@ -78,7 +81,7 @@ def restrict_posdata_specialbehav(derivatives_base, goals_to_include, frame_rate
 
     # Saving all into one df
     df_restricted_all =  pd.DataFrame(columns=['x', 'y', 'hd'])
-    for goal in [0,1,2]:
+    for goal in goals_to_include:
         df_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', f'XY_HD_goal{goal}_trials.csv')
         df_goal = pd.read_csv(df_path)
         df_restricted_all = pd.concat([df_restricted_all, df_goal])
@@ -88,10 +91,11 @@ def restrict_posdata_specialbehav(derivatives_base, goals_to_include, frame_rate
     output_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', 'XY_HD_allintervals.csv')
     df_restricted_all.to_csv(output_path, index = False)
     
-    fig, ax = plt.subplots(1, 5, figsize=(30, 4))
+    goals_to_plot = np.append(goals_to_include, [3,4]) if len(goals_to_include) > 1 else np.append(goals_to_include, 3)
+    fig, ax = plt.subplots(1, len(goals_to_plot), figsize=(len(goals_to_plot)*4, 4))
     ax = ax.flatten()
     
-    for i, goal in enumerate([0,1,2, 3, 4]):
+    for i, goal in enumerate(goals_to_plot):
         if goal < 3:
             goal_path = os.path.join(
                 derivatives_base,
@@ -138,7 +142,9 @@ def restrict_posdata_specialbehav(derivatives_base, goals_to_include, frame_rate
         os.makedirs(output_folder)
     output_path = os.path.join(output_folder, 'session_overview.png')
     plt.savefig(output_path)
-    plt.show()
+    if show_plots:
+        plt.show()
+    plt.close(fig)
                 
 
 

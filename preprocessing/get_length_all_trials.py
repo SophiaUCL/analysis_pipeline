@@ -1,38 +1,50 @@
-# %%
 import numpy as np
-import os
-import glob
 import pandas as pd
 import re
+from pathlib import Path
 
-
-def get_length_all_trials(rawsession_folder, trials_to_include):
+def get_length_all_trials(derivatives_base: Path, trials_to_include: list[int]) -> None:
     """
-    Creates a file with the trial length for all the trials
-    Saves it to rawsession_folder/task_metadata/trials_length.csv
+    Creates a file with the trial length for all the trials (which it obtains from the meta files)
+    Saves it to derivatives_base/metadata/trials_length.csv
     
-    Inputs:
-        rawsession_folder: path to rawsession folder
-        trials_to_include: trial numbers
+    Inputs
+    -----------
+    derivatives_base (Path): path to derivatives base folder
+    trials_to_include (list[int]): trial numbers
+        
+    Outputs
+    -------------
+    derivatives_base/metadata/trials_length.csv
+        csv file with trial numbers, g numbers, trial length (s), and cumulative length (length of all trials up until that trial)
+        
+    Raises
+    ------------
+    raise ValueError(f"Error in g numbers, order is wrong. Do zero padding. g_numbers = {g_numbers}")
+        if g numbers are wrongly ordered (this happens if the g numbers are not zero padded beforehand, then g10 comes before g9)
+        
+
+    Called by
+    -----------
+    main_pipeline.py
     """
+    rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent
     # Loading data paths
-    ephys_path = os.path.join(rawsession_folder, 'ephys')
-    output_folder = os.path.join(rawsession_folder, "task_metadata")
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-    output_path = os.path.join(output_folder, "trials_length.csv")
+    ephys_path = rawsession_folder /  'ephys'
+    output_folder = derivatives_base / "metadata"
+    output_folder.mkdir(exist_ok = True)
+    output_path = output_folder / "trials_length.csv"
 
 
     # Step 1: First we find all run folders (e.g., ses-01_g0, ses-01_g1, etc.)
-    pattern = os.path.join(ephys_path, "ses*")
-    run_folders = [folder for folder in glob.glob(pattern) if os.path.isdir(folder)]
+    run_folders = list(ephys_path.glob(r"ses*"))
 
-    print(f"Found {len(run_folders)} run folder(s) in {ephys_path}:\n")
+    print(f"Found {len(run_folders)} run fo  lder(s) in {ephys_path}:\n")
 
     # going over all the folders
     for folder in run_folders:
-        base = os.path.basename(folder)
-        dir_parent = os.path.dirname(folder)
+        base = folder.name
+        dir_parent = folder.parent
 
         match = re.search(
             r'(?P<session>ses[-_]\d+).*?_g(?P<group>\d+)$',
@@ -41,25 +53,26 @@ def get_length_all_trials(rawsession_folder, trials_to_include):
 
         if match:
             new_name = f"{match['session']}_g{int(match['group']):02d}"
-            new_path = os.path.join(dir_parent, new_name)
+            new_path = dir_parent / new_name
 
             if new_path != folder:
                 print(f"Renaming: {base} → {new_name}")
-                os.rename(folder, new_path)
+                folder.rename(new_path)
         else:
             print(f"Skipping {base}: no match for 'g' number pattern.")
 
 
     # Assinging new folders
-    run_folders = [folder for folder in glob.glob(pattern) if os.path.isdir(folder)]
+    run_folders = list(ephys_path.glob(r"ses*"))
 
     g_numbers = []
     trials_length = []
-    
+    cumul_length = []
+    cumul_length_num = 0
     # Step 2: Process each run folder
     for run_folder in run_folders:
 
-        basename = os.path.basename(run_folder)
+        basename = run_folder.name
         match = re.search(r'ses[-_]\d+.*?_g(\d+)', basename)
         if match:
             group_number = int(match.group(1))
@@ -72,18 +85,16 @@ def get_length_all_trials(rawsession_folder, trials_to_include):
 
             
         # Step 2a: Get subfolder inside run_folder (e.g., ses-01_g0_imec0)
-        subfolders = [f for f in os.listdir(run_folder) if os.path.isdir(os.path.join(run_folder, f))]
+        subfolders = [f for f in run_folder.iterdir() if f.is_dir()]
         if not subfolders:
             print(f"  Warning: No subfolders found in {run_folder}. Skipping.")
             continue
 
         subfolder_name = subfolders[0]
-        subfolder_path = os.path.join(run_folder, subfolder_name)
+        subfolder_path = run_folder / subfolder_name
 
         # Step 2b: Look for meta file
-        meta_pattern = os.path.join(subfolder_path, "*meta*")
-        meta_matches = glob.glob(meta_pattern)
-
+        meta_matches = list(subfolder_path.glob("*meta*"))
         if not meta_matches:
             print(f"  Warning: No meta files found in {subfolder_path}. Skipping.")
             continue
@@ -104,10 +115,11 @@ def get_length_all_trials(rawsession_folder, trials_to_include):
             else:
                 print(f"  Warning: 'fileTimeSecs' not found in {meta_path}")
             trials_length.append(file_time_secs)
+            cumul_length.append(cumul_length_num)
+            cumul_length_num += file_time_secs
         except Exception as e:
             print(f"  Error reading meta file {meta_path}: {e}")
-
-    data = {"trialnumber": trials_to_include, "g": g_numbers, "trial length (s)": trials_length}
+    data = {"trialnumber": trials_to_include, "g": g_numbers, "trial length (s)": trials_length, "cumulative length": cumul_length}
     trial_length_df = pd.DataFrame(data)
     trial_length_df.to_csv(output_path, index = False)
     print(f"Saved to {output_path}")

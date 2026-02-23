@@ -6,7 +6,9 @@ import matplotlib
 matplotlib.use("QtAgg")
 from joblib import Parallel, delayed
 from HCT_analysis.utilities.mrl_func import resultant_vector_length
+from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
 from astropy.stats import circmean
+import os
 
 num_candidate_sinks = 127
 """ In this code, the bins are the platforms"""
@@ -49,6 +51,41 @@ def get_dir_allframes(pos_data, sink_positions):
         reldir_allframes[:, s] = relative_direction
     return sinkdir_allframes, reldir_allframes
 
+def export_sig_sinks(methods,output_folder,goals_to_include=[0, 1, 2]):
+    """
+    Export ONLY unit IDs of significant consinks.
+    One file per method, containing a dict: {goal: np.array(unit_ids)}
+    """
+
+    for method in methods:
+        consinks_df = load_pickle(f'consinks_df_m{method}', output_folder)
+
+        sig_units_per_goal = {}
+
+        for g in goals_to_include:
+            sig_col = f'sig_g{g}'
+            if sig_col not in consinks_df.columns:
+                print(f"[Method {method}] No column {sig_col}, skipping")
+                continue
+
+            unit_ids = consinks_df.index[
+                consinks_df[sig_col] == 'sig'
+            ].to_numpy()
+
+            sig_units_per_goal[g] = unit_ids.astype(int)
+
+            print(
+                f"[Method {method}, Goal {g}] "
+                f"{len(unit_ids)} significant units"
+            )
+
+        save_path = os.path.join(
+            output_folder,
+            f'significant_consink_unit_ids_method_{method}.npy'
+        )
+        np.save(save_path, sig_units_per_goal, allow_pickle=True)
+
+        print(f"[Method {method}] Saved → {save_path}")
 
 # MRL CALCULATION
 def mean_resultant_length_nrdd(normalised_rel_dir_dist, direction_bins):

@@ -3,19 +3,20 @@ import numpy as np
 import pandas as pd
 from matplotlib.path import Path
 import os
-from calculate_pos_and_dir import get_directions_to_position, get_relative_directions_to_position
-from calculate_occupancy import get_relative_direction_occupancy_by_position, get_axes_limits, get_direction_bins, \
+from HCT_analysis.calculate_pos_and_dir import get_directions_to_position, get_relative_directions_to_position
+from HCT_analysis.calculate_occupancy import get_relative_direction_occupancy_by_position, get_axes_limits, get_direction_bins, \
     bin_directions, get_relative_direction_occupancy_by_position_platformbins
 import spikeinterface.extractors as se
-from utilities.platforms_utils import get_platform_center, calculate_occupancy_plats, get_hd_distr_allplats, \
+from HCT_analysis.find_consinks_main_functions import mean_resultant_length_nrdd
+from HCT_analysis.utilities.platforms_utils import get_platform_center, calculate_occupancy_plats, get_hd_distr_allplats, \
     get_firing_rate_platforms, get_norm_hd_distr
-from utilities.restrict_spiketrain_specialbehav import restrict_spiketrain_specialbehav
-from find_consinks_main import find_consink_method2, find_consink, mean_resultant_length_nrdd
-from utilities.mrl_func import resultant_vector_length
-from utilities.utils import get_unit_ids
+from HCT_analysis.utilities.restrict_spiketrain_specialbehav import restrict_spiketrain_specialbehav
+from HCT_analysis.find_consinks_main import find_consink_method2, find_consink, get_reldir_bin_idx
+from HCT_analysis.utilities.mrl_func import resultant_vector_length
+from HCT_analysis.utilities.utils import get_unit_ids
 from astropy.stats import circmean
-from utilities.load_and_save_data import load_pickle, save_pickle
-from utilities.trials_utils import get_limits_from_json, get_goal_numbers, get_coords, get_sink_positions_platforms, get_coords_127sinks
+from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
+from HCT_analysis.utilities.trials_utils import get_limits_from_json, get_goal_numbers, get_coords, get_sink_positions_platforms, get_coords_127sinks
 import matplotlib.pyplot as plt
 from matplotlib.patches import RegularPolygon
 from tqdm import tqdm
@@ -72,7 +73,6 @@ def restrict_pos_data(derivatives_base, g, pos_data_iv):
         pos_data_g = pos_data_iv
         platform_occupancy_g = calculate_occupancy_plats(pos_data_iv)
         hd_distr_g, bin_centers = get_hd_distr_allplats(pos_data_iv)
-    breakpoint()
     return pos_data_g, platform_occupancy_g, hd_distr_g, bin_centers
 
 
@@ -214,10 +214,10 @@ def find_popsink_m3(reldir_allframes, direction_bins):
     max_mrl = np.max(mrl)
     max_mrl_indices = np.where(mrl == max_mrl)
     mean_angle = np.round(mean_angles[max_mrl_indices[0][0]],3)
-    return np.round(max_mrl, 3), max_mrl_indices, mean_angle
+    return np.round(max_mrl, 3), max_mrl_indices, mean_angle, dir_dist
 
-def calculate_popsink(derivatives_base, unit_type, title='Population Sinks', dir = 'popsinks', run_zero=True, frame_rate=25,
-                      sample_rate=30000, code_to_run=[]):
+def calculate_popsink(derivatives_base, unit_type, load_units_which_method, title='Population Sinks', dir = 'popsinks', goals_to_include = [0,1,2], frame_rate=25,
+                      sample_rate=30000, code_to_run=[1,2]):
     """
     calculates the population sink for the whole trial, for units split into goal 1 and units split into goal 2
 
@@ -232,6 +232,12 @@ def calculate_popsink(derivatives_base, unit_type, title='Population Sinks', dir
     # Loading units
     unit_ids = sorting.unit_ids
     unit_ids = get_unit_ids(unit_ids, unit_type, derivatives_base)
+    consink_folder = os.path.join(derivatives_base, 'analysis', 'cell_characteristics', 'spatial_features',
+                                 'consinks')
+    unit_ids = np.load(os.path.join(consink_folder, f'significant_consink_unit_ids_method_{load_units_which_method}.npy'), allow_pickle = True)
+    unit_item = unit_ids.item()
+    unit_ids = unit_item[1]
+    unit_ids = [el for el in unit_ids if el != 175]
 
     # To load data
     limits = get_limits_from_json(derivatives_base)
@@ -242,29 +248,31 @@ def calculate_popsink(derivatives_base, unit_type, title='Population Sinks', dir
     hcoord_127, vcoord_127 = get_coords_127sinks(derivatives_base)
     methods = ['trial_norm', 'plat_norm', 'no_norm']
 
-    ncols = 4 - 1 + run_zero
+    ncols = len(goals_to_include)
     nrows = len(methods)
     fig, axs = plt.subplots(nrows, ncols, figsize=(ncols*8, nrows*8))
+    title = f"Population sinks which consink cells from method {load_units_which_method}"
     fig.suptitle(title)
+    axs = np.atleast_2d(axs)
+    if len(goals_to_include) > 1:
+        goals_to_include = np.append(goals_to_include, 3) # add g = 3: splitting it per goal
     # Loop over all units
     if 1 in code_to_run:
         platform_occupancy_allgoals = []
-        for g in range(4):
+        for i_g, g in enumerate(goals_to_include):
             # Here g == 3 corresponds to the whole session, not split into goals
             scaled_vecs_allplats = []
             allscales = []
             allfiring_rates = []
             allnorm_MRL = []
 
-            if g == 0 and not run_zero:
-                continue
             # For each goal, obtains its positional data, and for each platform,
             # calculat the head direction distribution and occupancy
             pos_data_g, platform_occupancy_g, hd_distr_g, bin_centers = restrict_pos_data(derivatives_base, g,
                                                                                           pos_data_iv)  # NOTE: Here we use iv data for g ==3
 
             # Find all platforms where occupancy is below 10 seconds
-            p_low_occ = [np.where(np.array(platform_occupancy_g) < frame_rate * 10)[0]]
+            p_low_occ = [np.where(np.array(platform_occupancy_g) < frame_rate * 20)[0]]
 
             for val, unit_id in tqdm(enumerate(unit_ids)):
                 # Load spike times
@@ -324,20 +332,24 @@ def calculate_popsink(derivatives_base, unit_type, title='Population Sinks', dir
             # Calculation
             ## THESE TWO I REWRITE
             sinkdir_allframes, reldir_allframes = get_dir_allframes(spikePos, spikeHD, sink_positions)
+            rel_dir_bin_idx = get_reldir_bin_idx(reldir_allframes, direction_bins)
             reldir_occ_by_pos = get_relative_direction_occupancy_by_position_platformbins(pos_data_g, sink_positions, num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
 
 
             for m, method in enumerate(methods):
                 if method == 'trial_norm':
-                    max_mrl, max_mrl_indices, mean_angle = find_consink(
+                    print("m1")
+                    max_mrl, max_mrl_indices, mean_angle, _ = find_consink(
                         fake_spike_train, reldir_occ_by_pos, direction_bins, pos_data,
                         reldir_allframes, platforms_spk = spikePlats, verify_nans = False)
                 elif method == "plat_norm":
-                    max_mrl, max_mrl_indices, mean_angle = find_consink_method2(
+                    print("m2")
+                    max_mrl, max_mrl_indices, mean_angle, _ = find_consink_method2(
                         fake_spike_train, reldir_occ_by_pos, direction_bins, pos_data,
-                        reldir_allframes, platforms_spk=spikePlats, verify_nans=False)
+                        reldir_allframes,reldir_bin_idx = rel_dir_bin_idx, platforms_spk=spikePlats, verify_nans=False)
                 else:
-                    max_mrl, max_mrl_indices, mean_angle = find_popsink_m3(reldir_allframes, direction_bins)
+                    print("m3")
+                    max_mrl, max_mrl_indices, mean_angle= find_popsink_m3(reldir_allframes, direction_bins)
                 # Saving
                 if g == 3:
                     name = f"popsink_wholetrial_{method}"
@@ -360,9 +372,9 @@ def calculate_popsink(derivatives_base, unit_type, title='Population Sinks', dir
                     'nspikes': nspikes}
 
                 save_pickle(mrl_dataset, name, output_folder)
-                plot_popsink_w_vectors(mrl_dataset,  hcoord, vcoord, limits, output_folder,plot_name=title, ax = axs[m, g - 1 + run_zero])
+                #plot_popsink_w_vectors(mrl_dataset,  hcoord, vcoord, limits, output_folder,plot_name=title, ax = axs[i_g, m])
                 # plot_plat_info(allfiring_rates, allnorm_MRL, allscales, hcoord, vcoord )
-
+ 
                 # Gather all important variables from this runS
                 save_session_data(output_folder, method, pos, hd, nspikes, pos_org, platform_occupancy_g, scaled_vecs_allplats,
                                   allscales, allfiring_rates, allnorm_MRL, hcoord, vcoord, unit_type, hd_org, nspikes_org,
@@ -373,9 +385,7 @@ def calculate_popsink(derivatives_base, unit_type, title='Population Sinks', dir
 
 
     if 2 in code_to_run:
-        for g in range(4):
-            if g == 0 and not run_zero:
-                continue
+        for i_g, g in enumerate(goals_to_include):
 
 
 
@@ -387,33 +397,34 @@ def calculate_popsink(derivatives_base, unit_type, title='Population Sinks', dir
                     name = f"popsink_g{g}_{method}"
                     title = f"Goal {g}, {method}"
                 mrl_dataset= load_pickle(name, output_folder)
-                plot_popsink_w_vectors(mrl_dataset, hcoord, vcoord, limits, output_folder, plot_name=title, ax = axs[m, g - 1 + run_zero])
+                plot_popsink_w_vectors(mrl_dataset,  hcoord, vcoord, limits, output_folder,plot_name=title, ax = axs[i_g, m])
 
 
 
-        plt.savefig(os.path.join(output_folder, f'Population sink overview.png'))
+        plt.savefig(os.path.join(output_folder, f'Population sink overview with consinks from method {load_units_which_method}.png'))
         print(f"Saved population sink plot to {output_folder}")
         #plt.tight_layout()
         plt.show()
         platform_occupancy_allgoals = load_pickle('platform_occupancy_allgoals', output_folder)
-        plot_platform_occupancy(platform_occupancy_allgoals, hcoord, vcoord, limits, output_folder, run_zero=run_zero,plot_name='Platform Occupancy all goals')
+        plot_platform_occupancy(platform_occupancy_allgoals, hcoord, vcoord, limits, output_folder, goals_to_include,plot_name='Platform Occupancy all goals')
 
 
-def plot_platform_occupancy(platform_occupancy_allgoals, hcoord, vcoord, limits, output_folder, run_zero=True,
+def plot_platform_occupancy(platform_occupancy_allgoals, hcoord, vcoord, limits, output_folder,goals_to_include = [0,1,2],
                             plot_name='Platform Occupancy all goals', frame_rate=25):
     """ Plots occupancy for all platforms for each goal """
     x_min, x_max, y_min, y_max = limits
 
-    fig, axs = plt.subplots(1, 3 + run_zero, figsize=(8 * (3 + run_zero), 8))
-    axs = axs.flatten()
+    fig, axs = plt.subplots(1, len(goals_to_include), figsize=(8 * len(goals_to_include), 8))
+    if len(goals_to_include) == 1:
+        axs = [axs]
+    
+    #axs = axs.flatten()
 
     cmap = plt.get_cmap('RdYlGn')
 
-    for j in range(4):  # j = 0, rat going to g2 during g1. j = 1, goal 1. j = 2, goal 2, j = 3 full trial
-        if not run_zero and j == 0:
-            continue
-        ax = axs[j - (0 if run_zero else 1)]
-        occupancy = platform_occupancy_allgoals[j - (0 if run_zero else 1)]
+    for i_g, j in enumerate(goals_to_include):  # j = 0, rat going to g2 during g1. j = 1, goal 1. j = 2, goal 2, j = 3 full trial
+        ax = axs[i_g]
+        occupancy = platform_occupancy_allgoals[i_g]
         occupancy = [el / frame_rate for el in occupancy]
         occupancy_normalized = occupancy / np.nanmax(occupancy)
         for i, (x, y) in enumerate(zip(hcoord, vcoord)):

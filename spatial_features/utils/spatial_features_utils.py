@@ -1,26 +1,23 @@
 import numpy as np
 import os
-import glob
 import pandas as pd
-import spikeinterface.extractors as se
-import matplotlib.pyplot as plt
-from tqdm import tqdm
 import json
 from typing import Literal
-import warnings
-from astropy.stats import circmean
 import astropy.convolution as cnv
+from pathlib import Path
+from spikeinterface.core import BaseRecording, BaseSorting, SortingAnalyzer
+UnitTypes = Literal['pyramidal', 'good', 'all']
+Methods = Literal["ears", "center"]
 
-
-def load_unit_ids(derivatives_base, unit_type, unit_ids):
+def load_unit_ids(derivatives_base: Path, unit_type: UnitTypes, unit_ids: list) -> list:
     """ Returns unit_ids, the unit_ids that we will create rmaps for"""
     if unit_type == 'good':
-        good_units_path = os.path.join(derivatives_base, "ephys", "concat_run", "sorting","sorter_output", "cluster_group.tsv")
+        good_units_path =derivatives_base/"ephys"/"concat_run"/"sorting"/"sorter_output"/"cluster_group.tsv"
         good_units_df = pd.read_csv(good_units_path, sep='\t')
         unit_ids = good_units_df[good_units_df['group'] == 'good']['cluster_id'].values
         print("Using all good units")
     elif unit_type == 'pyramidal':
-        pyramidal_units_path = os.path.join(derivatives_base, "analysis", "cell_characteristics", "unit_features","all_units_overview", "pyramidal_units_2D.csv")
+        pyramidal_units_path = derivatives_base/"analysis"/"cell_characteristics"/"unit_features"/"all_units_overview"/"pyramidal_units_2D.csv"
         pyramidal_units_df = pd.read_csv(pyramidal_units_path)
         pyramidal_units = pyramidal_units_df['unit_ids'].values
         unit_ids = pyramidal_units
@@ -32,9 +29,9 @@ def load_unit_ids(derivatives_base, unit_type, unit_ids):
         raise ValueError("unit_type not good, pyramidal, or all. Provide correct input")
     return unit_ids
  
-def get_limits(derivatives_base):
+def get_limits(derivatives_base: Path) -> tuple[float, float, float, float]:
     """ Reads in limits from limits.json"""
-    limits_path = os.path.join(derivatives_base, "analysis", "maze_overlay", "limits.json")
+    limits_path = derivatives_base/"analysis"/"maze_overlay"/"limits.json"
     with open(limits_path) as json_data:
         limits = json.load(json_data)
         json_data.close()
@@ -45,10 +42,10 @@ def get_limits(derivatives_base):
     ymax = limits['y_max']
     return xmin, xmax, ymin, ymax
 
-def get_outline(derivatives_base):
+def get_outline(derivatives_base: Path):
     """Obtains outline of maze from maze_outline_coords.json"""
-    outline_path = os.path.join(derivatives_base, "analysis", "maze_overlay", "maze_outline_coords.json")
-    if os.path.exists(outline_path):
+    outline_path = derivatives_base/"analysis"/"maze_overlay"/"maze_outline_coords.json"
+    if outline_path.exists():
         with open(outline_path, "r") as f:
             outline = json.load(f)
         outline_x = outline["outline_x"]
@@ -68,7 +65,8 @@ def get_trial_length_info(epoch_times, trials_length,  tr):
     return start_time, trial_length, trial_row
             
 def get_spikes_tr(spike_train, trial_dur_so_far, start_time, x, frame_rate = 25):
-    """ Restricts spiketrain to current trial"""
+    """ Restricts spiketrain to current trial
+    Expects input in frames"""
     spike_train_this_trial = np.copy(spike_train)
     spike_train_this_trial =  [el for el in spike_train_this_trial if el > np.round(trial_dur_so_far+ start_time)*frame_rate] # filtering for current trial
     spike_train_this_trial = [el - np.round(trial_dur_so_far*frame_rate) for el in spike_train_this_trial]
@@ -81,8 +79,8 @@ def get_spikes_epoch(spike_train_this_trial, epoch_start, epoch_end, frame_rate)
     spike_train_this_epoch = np.asarray(spike_train_this_epoch, dtype=int)
     return spike_train_this_epoch
                      
-def get_posdata(derivatives_base, method = "ears", g = None):
-    """ Loads pos data path. g corresponds to the goal, where g == 3 is the full trial"""
+def get_posdata(derivatives_base: Path, method = "ears", g = None) -> tuple[np.ndarray, np.ndarray, np.ndarray, pd.DataFrame]:
+    """ Loads pos data path. g corresponds to the goal, where g == 3 is the full trial, g == 4 is open field trial (if the last trial is open field)"""
     if g is None or g == 3:
         if method == "ears":
             pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', 'XY_HD_alltrials.csv')
@@ -92,14 +90,24 @@ def get_posdata(derivatives_base, method = "ears", g = None):
             raise ValueError("Method must be ears or center")
     elif g in [0,1,2]:
          pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', f'XY_HD_goal{g}_trials.csv')
+    elif g == 4:
+        config_path = os.path.join(derivatives_base, "config.json")
+        with open(config_path) as json_data:
+            configs = json.load(json_data)
+            json_data.close()
+        inputs = configs["inputs"]
+        trial_numbers = inputs["trial_numbers"]
+        open_field_trial = trial_numbers[-1] # assumes last trial is open field
+        pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', f'XY_HD_center_t{open_field_trial}.csv')
     pos_data = pd.read_csv(pos_data_path)
 
     x = pos_data.iloc[:, 0].to_numpy()
     y = pos_data.iloc[:, 1].to_numpy()
     hd = pos_data.iloc[:, 2].to_numpy()
+
     return x, y, hd, pos_data
 
-def get_occupancy_time(hd, frame_rate, num_bins = 24):
+def get_occupancy_time(hd: np.ndarray, frame_rate: int = 25, num_bins: int = 24) -> np.ndarray:
     """ Obtains occupancy time for each bin for hd"""
     hd_filtered = hd[~np.isnan(hd)]
     if np.nanmax(hd_filtered) > 2*np.pi:
@@ -108,11 +116,14 @@ def get_occupancy_time(hd, frame_rate, num_bins = 24):
     occupancy_time = occupancy_counts / frame_rate 
     return occupancy_time
 
-def get_spike_train_frames(sorting, unit_id, x, sample_rate, frame_rate):
-    """ Returns spike train in frames. Excludes values above len(x)"""
+def get_spike_train_frames(sorting: BaseSorting, unit_id: int, x = None, sample_rate: int = 30000, frame_rate: int = 25) -> np.ndarray:
+    """ Returns spike train in frames. Excludes values above len(x) if x is not none"""
     spike_train_unscaled = sorting.get_unit_spike_train(unit_id=unit_id)
     spike_train_pre = np.round(spike_train_unscaled*frame_rate/sample_rate) # trial data is now in frames in order to match it with xy data
-    spike_train = [np.int32(el) for el in spike_train_pre if el < len(x)]  # Ensure spike train is within bounds of x and y
+    if x is not None:
+        spike_train = [np.int32(el) for el in spike_train_pre if el < len(x)]  # Ensure spike train is within bounds of x and y
+    else:
+        spike_train = [np.int32(el) for el in spike_train_pre]
     return spike_train
 
 def get_unit_info(df_unit_metrics, unit_id):
@@ -131,7 +142,7 @@ def load_trial_xpos(pos_data_dir, tr):
     x = xy_hd_trial.iloc[:, 0].to_numpy()  
     return x 
 
-def get_directional_firingrate(hd, spike_train, num_bins, occupancy_time):
+def get_directional_firingrate(hd: np.ndarray, spike_train: np.ndarray | list, num_bins: int, occupancy_time: np.ndarray):
     """ Gets the diretional firing rate and the bin centers"""
     
     # Get counts per bin
@@ -151,26 +162,22 @@ def get_directional_firingrate(hd, spike_train, num_bins, occupancy_time):
     return direction_firing_rate, bin_centers
         
 
-def get_goal_numbers(derivatives_base):
+def get_goal_numbers(derivatives_base: Path):
     """
     Obtains goal numbers from alltrials_trialday.csv
-    
-    Args:
-        rawsession_folder (str): path to the rawdata folder
     
     Returns:
         [goal1, goal2]
     """
-    rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
-    rawsession_folder = os.path.dirname(rawsession_folder)
+    rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent
     
-    df_path = os.path.join(rawsession_folder, "behaviour", "alltrials_trialday.csv")
+    df_path =rawsession_folder/"behaviour"/"alltrials_trialday.csv"
     df = pd.read_csv(df_path)
     goal1 = df['Goal 1'].values[0]
     goal2 = df['Goal 2'].values[0]
     
     ## Gets goal coordinates
-    params_path =  os.path.join(derivatives_base, "analysis", "maze_overlay", "maze_overlay_params.json")
+    params_path = derivatives_base/"analysis"/"maze_overlay"/"maze_overlay_params.json"
     with open(params_path) as f:
         params= json.load(f)
     hcoord_tr = params["hcoord_tr"]
@@ -179,12 +186,12 @@ def get_goal_numbers(derivatives_base):
     goal1_coords = [hcoord_tr[np.int32(goal1 -1)], vcoord_tr[np.int32(goal1 - 1)]]
     goal2_coords = [hcoord_tr[np.int32(goal2 -1)], vcoord_tr[np.int32(goal2 - 1)]]
     
-    coords_path =  os.path.join(derivatives_base, "analysis", "maze_overlay", "goal_coords.json")
+    coords_path =  derivatives_base/"analysis"/"maze_overlay"/"goal_coords.json"
     coords = {
         "goal1_coords": goal1_coords,
         "goal2_coords": goal2_coords
     }
-    os.makedirs(os.path.dirname(coords_path), exist_ok=True)
+    coords_path.parent.mkdir(exist_ok = True, parents = True)
     with open(coords_path, 'w') as f:
         json.dump(coords, f, indent=4)
         
@@ -237,50 +244,7 @@ def add_relative_hd(derivatives_base, goal_coordinates, method = "ears", goals =
                 pos_data[f'relative_hd_g{g}'] = relative_direction
                 pos_data.to_csv(fulltrial_path, index=False)
 
-            
-
-def get_relative_directions_to_position(directions_to_position, head_directions):
-    
-    relative_direction = head_directions - directions_to_position
-    # any relative direction greater than pi is actually less than pi
-    relative_direction[relative_direction > np.pi] -= 2*np.pi
-    # any relative direction less than -pi is actually greater than -pi
-    relative_direction[relative_direction < -np.pi] += 2*np.pi
-    
-    return relative_direction
-
-def get_directions_to_position(point_in_space, positions):
-    """ Suppose point in space (sink) is at (50,50) and position (animal) is (0,0)
-    Then the sink is bottom right from the animal (since y increases downwards in image coordinates)
-    Therefore the angle is -45 degrees or -pi/4 radians. This checks out
-    x_diff = 50 - 0 = 50
-    y_diff = 0 - 50 = -50
-    direction = arctan(-50/50) = arctan(-1) = -pi/4
-    """
-    x_diff = point_in_space[0] - positions['x']
-    y_diff = positions['y'] - point_in_space[1]
-    directions = np.arctan2(y_diff, x_diff)
-    return directions
-        
-        
-    
-def get_goal_coordinates(derivatives_base, rawsession_folder):
-    """
-    Returns:
-        Goal coordinates. If json file with them doesn't exist, it makes it
-    """
-    coords_path =  os.path.join(derivatives_base, "analysis", "maze_overlay", "goal_coords.json")
-    if not os.path.exists(coords_path):
-        get_goal_numbers(derivatives_base, rawsession_folder)
-    
-    with open(coords_path) as f:
-        data= json.load(f)
-
-    goal1_coords = data["goal1_coords"]
-    goal2_coords = data["goal2_coords"]
-    return [goal1_coords, goal2_coords]
-
-def get_ratemaps(spikes, x, y, n: int, binsize = 15, stddev = 5, frame_rate = 25):
+def get_ratemaps(spikes: np.ndarray, x: np.ndarray, y: np.ndarray, n: int = 3, binsize: int = 36, stddev: int = 25, occupancy_threshold: float = 0.4, frame_rate: int = 25):
     """
     Calculate the rate map for given spikes and positions.
 
@@ -288,9 +252,11 @@ def get_ratemaps(spikes, x, y, n: int, binsize = 15, stddev = 5, frame_rate = 25
         spikes (array): spike train for unit
         x (array): x positions of animal
         y (array): y positions of animal
-        n (int): kernel size for convolution
+        n (int: 15): kernel size for convolution
         binsize (int, optional): binning size of x and y data. Defaults to 15.
         stddev (int, optional): gaussian standard deviation. Defaults to 5.
+        occupancy_threshold (float: 0.4): occupancy values below 0.4 get set to nan
+        frame_rate (int: 25): frame rate of camera
 
     Returns:
         rmap: 2D array of rate map
@@ -327,18 +293,15 @@ def get_ratemaps(spikes, x, y, n: int, binsize = 15, stddev = 5, frame_rate = 25
     )
     
     # Removing values with very low occupancy (these sometimes have very large firing rate)
-    occupancy_threshold = 0.4
     rmap[smoothed_pos < occupancy_threshold] = np.nan
-
-
 
     return rmap, x_edges, y_edges
 
 
-def get_ratemaps_restrictedx(spikes, x, y, x_restr, y_restr,  n: int, binsize = 15, stddev = 5, frame_rate = 25):
+def get_ratemaps_restrictedx(spikes: np.ndarray, x: np.ndarray, y: np.ndarray, x_restr: np.ndarray, y_restr: np.ndarray,  n: int = 3, binsize: int = 36, stddev: int = 25, occupancy_threshold: float = 0.4,frame_rate: int = 25):
     """
     Calculate the rate map for given spikes and positions. x_restr and y_restr are used to calculate the occupancy map (since we're restricting over a time interval here)
-    used for plot_rmap_interactive
+    used for plot_rmap_interactive. For example used if you want to look only at one goal 
 
     Args:
         spikes (array): spike train for unit
@@ -384,9 +347,50 @@ def get_ratemaps_restrictedx(spikes, x, y, x_restr, y_restr,  n: int, binsize = 
     )
     
     # Removing values with very low occupancy (these sometimes have very large firing rate)
-    occupancy_threshold =0.4
     rmap[smoothed_pos < occupancy_threshold] = np.nan
-
-
     return rmap, x_edges, y_edges
+
+            
+
+def get_relative_directions_to_position(directions_to_position, head_directions):
+    
+    relative_direction = head_directions - directions_to_position
+    # any relative direction greater than pi is actually less than pi
+    relative_direction[relative_direction > np.pi] -= 2*np.pi
+    # any relative direction less than -pi is actually greater than -pi
+    relative_direction[relative_direction < -np.pi] += 2*np.pi
+    
+    return relative_direction
+
+def get_directions_to_position(point_in_space, positions):
+    """ Suppose point in space (sink) is at (50,50) and position (animal) is (0,0)
+    Then the sink is bottom right from the animal (since y increases downwards in image coordinates)
+    Therefore the angle is -45 degrees or -pi/4 radians. This checks out
+    x_diff = 50 - 0 = 50
+    y_diff = 0 - 50 = -50
+    direction = arctan(-50/50) = arctan(-1) = -pi/4
+    """
+    x_diff = point_in_space[0] - positions['x']
+    y_diff = positions['y'] - point_in_space[1]
+    directions = np.arctan2(y_diff, x_diff)
+    return directions
+        
+        
+    
+def get_goal_coordinates(derivatives_base: Path, rawsession_folder: Path):
+    """
+    Returns:
+        Goal coordinates. If json file with them doesn't exist, it makes it
+    """
+    coords_path =  derivatives_base/"analysis"/"maze_overlay"/"goal_coords.json"
+    if not coords_path.exists():
+        get_goal_numbers(derivatives_base)
+    
+    with open(coords_path) as f:
+        data= json.load(f)
+
+    goal1_coords = data["goal1_coords"]
+    goal2_coords = data["goal2_coords"]
+    return [goal1_coords, goal2_coords]
+
 

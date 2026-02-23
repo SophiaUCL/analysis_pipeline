@@ -1,21 +1,65 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import RegularPolygon
-import os
 import pandas as pd
 import matplotlib.patches as mpatches
 import matplotlib
+from pathlib import Path
 matplotlib.use('TkAgg')
-def plot_startplatforms(derivatives_base, goal_platforms, goals_to_include, show_plots = True):
+from HCT_analysis.utilities.trials_utils import  get_goal_numbers
+
+def make_maze_behaviour_plots(derivatives_base: Path, goals_to_include: list = [0,1,2], show_plots: bool = True):
+    """ 
+    Runs all three plotting functions: plot_occupancy, plot_propcorrect, and plot_startplatforms
+    
+    Inputs
+    ------
+    derivatives_base (Path): path to derivatives folder
+    goal_platforms (list): list of goal platforms [goal1, goal2]
+    goals_to_include (list): list of goals that we want to include
+    show_plots (bool: True): whether to show the plots
+    
+    Exports
+    -------
+    Into {derivatives_base}/analysis/maze_behaviour:
+        occupancy.png
+        proportion_correct.png
+        start_platforms.png
+    """
+    goal_platforms = get_goal_numbers(derivatives_base)
+    
+    # Shows a maze plot with the occupancy of each platform for goal 1 (left) goal 2 (middle) and all trials (right)
+    plot_occupancy(derivatives_base, goal_platforms, goals_to_include=goals_to_include, show_plots= show_plots)
+
+    # Shows a maze plot with all the start platforms
+    plot_startplatforms(derivatives_base, goal_platforms, show_plots= show_plots, goals_to_include=goals_to_include)
+
+    # Shows a maze plot with the proportion of correct choices for goal 1 (left) goal 2 (middle) and all trials (right)
+    plot_propcorrect(derivatives_base,goal_platforms, goals_to_include=goals_to_include, show_plots= show_plots)
+
+
+def plot_startplatforms(derivatives_base: Path, goal_platforms: list, goals_to_include: list = [0,1,2], show_plots: bool = True):
     """
     Shows a maze plot with all the start platforms
+    
+    Inputs
+    ------
+    derivatives_base (Path): path to derivatives folder
+    goal_platforms (list): list of goal platforms [goal1, goal2]
+    goals_to_include (list): list of goals that we want to include
+    show_plots (bool: True): whether to show the plots
+    
 
-    Exports:
-        start_platforms.png into {derivatives_base}/analysis/maze_behaviour
+    Exports
+    --------
+    start_platforms.png into {derivatives_base}/analysis/maze_behaviour
+    
+    Called by
+    -------
+    spatial_processing_pipeline.py
     """
-    rawsession_folder = rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
-    rawsession_folder = os.path.dirname(rawsession_folder)
-    path = os.path.join(rawsession_folder, "behaviour", "concatenated_trials.csv")
+    rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent
+    path = rawsession_folder/"behaviour"/"concatenated_trials.csv"
     df = pd.read_csv(path)
     
     trial_numbers = df['trial_number'].unique()
@@ -55,10 +99,10 @@ def plot_startplatforms(derivatives_base, goal_platforms, goals_to_include, show
         # Also add scatter points in hexagon centres
     ax.scatter(hcoord, vcoord, alpha=0, c = 'grey')
     ax.set_title('Start platforms (red) and goal platforms (green)')
-    output_folder = os.path.join(derivatives_base, "analysis", "maze_behaviour")
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-    plt.savefig(os.path.join(output_folder, "start_platforms.png"), dpi=300)
+    output_folder = derivatives_base/"analysis"/"maze_behaviour"
+    output_folder.mkdir(exist_ok = True)
+    output_file= output_folder / "start_platforms.png"
+    plt.savefig(output_file, dpi=300)
     if show_plots:
         plt.show()
     plt.close(fig)
@@ -66,21 +110,33 @@ def plot_startplatforms(derivatives_base, goal_platforms, goals_to_include, show
     print(f"File saved to output folder: {output_folder}")
     
 
-def plot_occupancy(derivatives_base, goal_platforms, goals_to_include = [0,1,2], show_plots=True):
+def plot_occupancy(derivatives_base: Path, goal_platforms: list, goals_to_include: list = [0,1,2], show_plots: bool=True) -> None:
     """
     Shows a maze plot with the occupancy of each platform for goal 1 (left) goal 2 (middle) (if applicable) and all trials (right)
     low: red, high: green
 
-    Exports:
+    Inputs
+    ------
+    derivatives_base (Path): path to derivatives folder
+    goal_platforms (list): list of goal platforms [goal1, goal2]
+    goals_to_include (list): list of goals that we want to include
+    show_plots (bool: True): whether to show the plots
+    
+    Exports
+    -------
         occupancy.png into {derivatives_base}/analysis/maze_behaviour
+        
+    Called by
+    -------
+    spatial_processing_pipeline.py
     """
     goals_to_include = [el for el in goals_to_include if el != 0]
     if len(goals_to_include) > 1:
         goals_to_include = np.append(goals_to_include, 3)
-    rawsession_folder = rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
-    rawsession_folder = os.path.dirname(rawsession_folder)
+    rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent
+    
     # Input path
-    path = os.path.join(rawsession_folder, "behaviour", "concatenated_trials.csv")
+    path = rawsession_folder/"behaviour"/"concatenated_trials.csv"
     df = pd.read_csv(path)
 
     # 3 x 1 subplot
@@ -103,7 +159,6 @@ def plot_occupancy(derivatives_base, goal_platforms, goals_to_include = [0,1,2],
         else:
             df_g = df
             title = "Full trials"
-
         occupancy = []
         
         for plat in np.arange(1, 62):
@@ -118,7 +173,7 @@ def plot_occupancy(derivatives_base, goal_platforms, goals_to_include = [0,1,2],
                 colour = cmap(occupancy_norm[i])  # Map normalized occupancy to colormap
             else:
                 colour = "grey"
-            if (g < 2 and i + 1 == goal_platforms[g]) or (g == 2 and i + 1 in goal_platforms):
+            if (g > 0 and i + 1 == goal_platforms[g-1]) or (g == 0 and i + 1 in goal_platforms):
                     edgecolor = "blue"
                     linewidth = 5
             else:
@@ -134,29 +189,43 @@ def plot_occupancy(derivatives_base, goal_platforms, goals_to_include = [0,1,2],
         ax[j].scatter(hcoord, vcoord, alpha=0, c = 'grey')
         ax[j].set_title(title)
         ax[j].set_aspect('equal')
-    output_folder = os.path.join(derivatives_base, "analysis", "maze_behaviour")
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-    plt.savefig(os.path.join(output_folder, "occupancy.png"), dpi=300)
+    output_folder = derivatives_base/"analysis"/"maze_behaviour"
+    output_folder.mkdir(exist_ok = True)
+    output_file= output_folder / "occupancy.png"
+
+    plt.savefig(output_file, dpi=300)
 
     if show_plots:
         plt.show()
     plt.close(fig)
     print(f"File saved to output folder: {output_folder}")
 
-def plot_propcorrect(derivatives_base,goal_platforms, goals_to_include = [0,1,2], show_plots = True):
+def plot_propcorrect(derivatives_base: Path, goal_platforms: list, goals_to_include: list = [0,1,2], show_plots: bool = True):
     """
     Shows a maze plot with the proportion of correct choices for goal 1 (left) goal 2 (middle) (fif applicable) and all trials (right)
 
-    Exports:
+    Inputs
+    ------
+    derivatives_base (Path): path to derivatives folder
+    goal_platforms (list): list of goal platforms [goal1, goal2]
+    goals_to_include (list): list of goals that we want to include
+    show_plots (bool: True): whether to show the plots
+    
+    Exports
+    ------
         proportion_correct.png into {derivatives_base}/analysis/maze_behaviour
+    
+    Called by
+    -------
+    spatial_processing_pipeline.py
     """
+    
     goals_to_include = [el for el in goals_to_include if el != 0]
     if len(goals_to_include) > 1:
         goals_to_include = np.append(goals_to_include, 3)
-    rawsession_folder = rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
-    rawsession_folder = os.path.dirname(rawsession_folder)
-    path = os.path.join(rawsession_folder, "behaviour", "concatenated_trials.csv")
+    rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent
+    
+    path = rawsession_folder/"behaviour"/"concatenated_trials.csv"
     df = pd.read_csv(path)
 
     # 3 x 1 subplot
@@ -203,7 +272,7 @@ def plot_propcorrect(derivatives_base,goal_platforms, goals_to_include = [0,1,2]
             else:
                 colour = cmap(prop_correct_arr[i])  # Map normalized occupancy to colormap
                 text = np.round(prop_correct_arr[i], 1)
-            if (g < 2 and i + 1 == goal_platforms[g]) or (g == 2 and i + 1 in goal_platforms):
+            if (g > 0 and i + 1 == goal_platforms[g-1]) or (g == 0 and i + 1 in goal_platforms):
                 edgecolor = "blue"
                 linewidth = 5
             else:
@@ -219,10 +288,10 @@ def plot_propcorrect(derivatives_base,goal_platforms, goals_to_include = [0,1,2]
         ax[j].scatter(hcoord, vcoord, alpha=0, c = 'grey')
         ax[j].set_title(title)
         ax[j].set_aspect('equal')
-    output_folder = os.path.join(derivatives_base, "analysis", "maze_behaviour")
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-    plt.savefig(os.path.join(output_folder, "proportion_correct.png"), dpi=300)
+    output_folder = derivatives_base/"analysis"/"maze_behaviour"
+    output_folder.mkdir(exist_ok = True)
+    output_file= output_folder / "proportion_correct.png"
+    plt.savefig(output_file, dpi=300)
     if show_plots:
         plt.show()
     plt.close(fig)

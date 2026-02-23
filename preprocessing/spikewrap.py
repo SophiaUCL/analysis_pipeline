@@ -4,24 +4,32 @@ Script to run spikewrap
 
 '''
 import spikewrap as sw
-import os
-import json
 from pathlib import Path
 import torch
-print(torch.cuda.is_available())
-def run_spikewrap(derivatives_base, subject_path, session_name, concat_runs = True):
+from preprocessing.append_config import append_config
+print(torch.cuda.is_available()) # Checks whether GPU is in use
+
+def run_spikewrap(derivatives_base: Path, subject_path: Path, session_name: str, concat_runs: bool = True) -> None:
     """
     Function runs spikewrap
-    Input:
-        derivatives_base: path to derivatives folder
-        subject_path: path with ephys data
-        session_name: name of this session
+    NOTE: if concat_run is false, the folder name is different than usual (usually its concat_run), leading to errors in the spikeinterface code
+    
+    Inputs
+    --------
+    derivatives_base: Path
+        path to derivatives folder
+    subject_path: Path
+        path to ephys data
+    session_name: str
+        name of this session (for example, all_trials)
 
-    Creates:
+    Creates
+    ---------
         Binned data (as a raw file)
         Kilosort4 output
 
-    Currently runs the following:
+    Currently runs the following
+    ----------------
     Preprocessing:
         Global CAR
         Bandpass filter 300-6000 Hz
@@ -29,6 +37,10 @@ def run_spikewrap(derivatives_base, subject_path, session_name, concat_runs = Tr
         No drift correction (nblocks = 0)
         No CAR
         Highpass cutoff 100 Hz (probably redundant given preprocessing)
+    
+    Called by
+    ---------
+    main_pipeline.py
     """
     
     session = sw.Session(
@@ -36,7 +48,7 @@ def run_spikewrap(derivatives_base, subject_path, session_name, concat_runs = Tr
         session_name=session_name, # For example, ses-01
         file_format="spikeglx",
         run_names="all",
-        output_path = os.path.join(derivatives_base, "ephys"),
+        output_path = derivatives_base /  "ephys"
     )
 
     session.preprocess(
@@ -54,7 +66,6 @@ def run_spikewrap(derivatives_base, subject_path, session_name, concat_runs = Tr
         slurm=False
     )
 
-    
     # Parameters for running kilosort
     do_CAR = False
     save_preprocessed_copy = True
@@ -72,43 +83,7 @@ def run_spikewrap(derivatives_base, subject_path, session_name, concat_runs = Tr
     cfg["sorting"]["kilosort4"] = {"do_CAR": False, "save_preprocessed_copy": True, "save_preprocessed_copy": False, "nblocks": 0 , "highpass_cutoff": 100}
 
     session.sort(cfg, run_sorter_method="local", per_shank=False, concat_runs=False)
-    
-def deep_update(d, u):
-    """Recursively update dict d with dict u"""
-    for k, v in u.items():
-        if isinstance(v, dict) and isinstance(d.get(k), dict):
-            deep_update(d[k], v)
-        else:
-            d[k] = v
-    return d
 
-
-def append_config(folder, new_data, filename="config.json"):
-    """
-    Appends data to the config file in the derivatives folder
-    
-
-    Args:
-        derivatives_base: Path to derivatives_base
-        data: dictionary with configuration data
-    """
-    config_file = Path(folder) / filename
-
-    if config_file.exists():
-        with open(config_file, "r") as f:
-            try:
-                existing_data = json.load(f)
-            except json.JSONDecodeError:
-                existing_data = {}
-    else:
-        existing_data = {}
-
-    # merge deeply instead of replacing
-    deep_update(existing_data, new_data)
-
-    with open(config_file, "w") as f:
-        json.dump(existing_data, f, indent=4)
-  
 if __name__ == "__main__":
     derivatives_base = "D:/Spatiotemporal_task/derivatives/sub-003_id_2V/ses-02_testHCT/test"
     subject_path = "D:/Spatiotemporal_task/rawdata/sub-003_id_2V"

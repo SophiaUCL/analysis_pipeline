@@ -2,108 +2,86 @@
 
 
 from matplotlib.widgets import PolygonSelector
-from matplotlib.path import Path
+from matplotlib.path import Path as MplPath
 import numpy as np
-import os
 import pandas as pd
 import spikeinterface.extractors as se
 import matplotlib.pyplot as plt
-from spatial_functions import get_ratemaps, get_ratemaps_restrictedx
-from get_sig_cells import get_sig_cells
-import json
-import warnings
-from astropy.stats import circmean
+from utils.spatial_features_utils import get_spike_train_frames,  get_ratemaps, get_ratemaps_restrictedx, get_outline, get_occupancy_time, get_limits, get_posdata
+from utils.spatial_features_plots import plot_directional_firingrate, plot_rmap, plot_spikemap_interactive_rmap
 from matplotlib.gridspec import GridSpec
+from pathlib import Path
+from typing import Literal
 
-def plot_rmap_interactive(derivatives_base, unit_id, task, frame_rate = 25, sample_rate = 30000):
+Tasks = Literal["hct", "spatiotemp"]
+
+def plot_rmap_interactive(derivatives_base: Path , unit_id: int, task: Tasks, last_trial_open_field: bool = False, frame_rate: int = 25, sample_rate: int = 30000):
     """ 
-    Makes a plot for each unit with its ratemap (left), occupancy (middle) and directional firing rate (right).
-    User adjustable
-
-    Inputs: derivatives base
+    Interactively define a temporal subregion on a spikecount plot and examine how a neuron’s directional tuning and ratemap changes when restricted to that region.
+    Plots
+    -----
+    Left: ratemap
+    Middle: spikemap, showing spikes during the selected intervals of the trials (red) and outside (blue)
+    Right: HD distribution restricted to temperal area 
+    Bottom: Spikecount of neuron throughout the trials
+    
+    Inputs
+    -------
+    derivatives_base (Path): Path to derivatives folder
+    unit_id (int): unit that we're looking at
+    tasks (hct or spatiotemp): task that we're doing
+    last_trial_open_field (bool: False): Whether the last trial is an open field trial
+    frame_rate (int: 25): frame rate of camera 
+    sample_rate (int: 30000): sample rate of recording
     
     """
     # Load data files
-    rawsession_folder = derivatives_base.replace('derivatives', 'rawdata')
-    rawsession_folder = os.path.dirname(rawsession_folder)
+    rawsession_folder = Path(str(derivatives_base).replace('derivatives', 'rawdata')).parent
     
     # Load data files
-    kilosort_output_path = os.path.join(derivatives_base, 'ephys', "concat_run","sorting", "sorter_output" )
+    kilosort_output_path = derivatives_base/ 'ephys'/ "concat_run"/"sorting"/ "sorter_output" 
     sorting = se.read_kilosort(
         folder_path = kilosort_output_path
     )
    
-    
-    # Limits
-    limits_path = os.path.join(derivatives_base, "analysis", "maze_overlay", "limits.json")
-    with open(limits_path) as json_data:
-        limits = json.load(json_data)
-        json_data.close()
-    
-    xmin = limits['xmin']
-    xmax = limits['xmax']
-    ymin = limits['ymin']
-    ymax = limits['ymax']
-    
-    # ---- Load maze outline coordinates ----
-    outline_path = os.path.join(derivatives_base, "analysis", "maze_overlay", "maze_outline_coords.json")
-    if os.path.exists(outline_path):
-        with open(outline_path, "r") as f:
-            outline = json.load(f)
-        outline_x = outline["outline_x"]
-        outline_y = outline["outline_y"]
-    else:
-        print("⚠️ Maze outline JSON not found; skipping red outline overlay.")
-        outline_x, outline_y = None, None
+    # Limits and outline
+    xmin, xmax, ymin, ymax = get_limits(derivatives_base)
+    outline_x, outline_y = get_outline(derivatives_base)
         
-    
     # Get directory for the positional data
-    pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', 'XY_HD_alltrials.csv')
-    pos_data = pd.read_csv(pos_data_path)
-
-    x = pos_data.iloc[:, 0].to_numpy()
-    y = pos_data.iloc[:, 1].to_numpy()
-    hd = pos_data.iloc[:, 2].to_numpy()
+    x, y, hd, pos_data = get_posdata(derivatives_base, method = "ears")
     
-        
+    
     # Loop over units
     print("Plotting ratemaps and hd")
 
     # Obtaining hd for this trial how much the animal sampled in each bin
     num_bins = 24
-    hd_filtered = hd[~np.isnan(hd)]
-    hd_filtered= np.deg2rad(hd_filtered)
-    occupancy_counts, _ = np.histogram(hd_filtered, bins=num_bins, range = [-np.pi, np.pi])
-    occupancy_time = occupancy_counts / frame_rate 
-
+    occupancy_time = get_occupancy_time(hd, frame_rate, num_bins = num_bins)
 
     # Load spike data
+    spike_train = get_spike_train_frames(sorting, unit_id, x, sample_rate, frame_rate)
     spike_train_unscaled = sorting.get_unit_spike_train(unit_id=unit_id)
-    spike_train_pre = np.round(spike_train_unscaled*frame_rate/sample_rate) # trial data is now in frames in order to match it with xy data
-    spike_train = [np.int32(el) for el in spike_train_pre if el < len(x)]  # Ensure spike train is within bounds of x and y
-    
+    spike_train_s = np.array(spike_train_unscaled)/sample_rate
     input = 'c'
-    mask = None 
     bin_length = 60
     hd_restrict = None
+    
     # Get original ratemap
     rmap, x_edges, y_edges = get_ratemaps(spike_train, x, y, 3, binsize=36, stddev=25)
     
     x_bin = np.digitize(x, x_edges) - 1
     y_bin = np.digitize(y, y_edges) - 1
-    
     mask_x = np.isnan(x)
     mask_y = np.isnan(y)
-    
     y_bin[mask_y] = -1
     x_bin[mask_x] = -1
-    
     pos_data['x_bin'] = x_bin
     pos_data['y_bin'] = y_bin
     
     # Get the data with trials length
-    path_to_df = os.path.join(rawsession_folder, 'task_metadata', 'trials_length.csv')
-    if not os.path.exists(path_to_df):
+    path_to_df = rawsession_folder/'task_metadata'/'trials_length.csv'
+    if not path_to_df.exists():
         raise FileExistsError('trials_length.csv doesnt exist')
     trial_length_df = pd.read_csv(path_to_df)
     
@@ -114,9 +92,9 @@ def plot_rmap_interactive(derivatives_base, unit_id, task, frame_rate = 25, samp
     y_restrict = None
     if task == 'hct':
         print("HCT: adding goal times to spikecount over trials")
-        trialday_path = os.path.join(rawsession_folder, 'behaviour', 'alltrials_trialday.csv')
+        trialday_path = rawsession_folder/'behaviour'/'alltrials_trialday.csv'
         trialday_df  = pd.read_csv(trialday_path)
-        if len(trialday_df) != len(trial_length_df):
+        if len(trialday_df) != len(trial_length_df) - last_trial_open_field:
             raise ValueError("length alltrials_trialday.csv is not the same as length trials to include. Remove unneeded trials")
         else:
             goal1_endtimes = np.array(trialday_df['Goal 1 end'])
@@ -154,86 +132,38 @@ def plot_rmap_interactive(derivatives_base, unit_id, task, frame_rate = 25, samp
         # Get original ratemap
         if inputs is not None:
             rmap, x_edges, y_edges = get_ratemaps_restrictedx(spike_train_filt, x, y, x_restrict, y_restrict, 3, binsize=36, stddev=25)
-      
-        im = ax1.imshow(rmap.T, 
-                cmap='viridis', 
-                interpolation = None,
-                origin='lower', 
-                aspect='auto', 
-                extent=[x_edges[0], x_edges[-1], y_edges[0], y_edges[-1]])
 
-
-        ax1.set_title(f"n = {len(spike_train)}")
-        ax1.set_xlim(xmin, xmax)
-        ax1.set_ylim(ymax, ymin)
-        ax1.set_aspect('equal')
-        if outline_x is not None and outline_y is not None:
-                ax1.plot(outline_x, outline_y, 'r-', lw=2, label='Maze outline')
-        #fig.colorbar(im, ax=axs[0], label='Firing rate')
-        #fig.colorbar(im, ax=ax1, label='Firing rate', shrink = 0.5)
+        
+        plot_rmap(rmap, xmin, xmax, ymin, ymax, x_edges, y_edges, outline_x, outline_y, ax = ax1, fig = fig, title = f"{len(spike_train_filt)}/{len(spike_train)}")
 
         # 2. spikemap
         is_filt = np.isin(spike_train, spike_train_filt)
-        x_spikes = x[spike_train]
-        y_spikes = y[spike_train]
-        hd_spikes = hd[spike_train]
-
-
-        valid = ~np.isnan(x_spikes) & ~np.isnan(y_spikes) & ~np.isnan(hd_spikes)
-        x_spikes = x_spikes[valid]
-        y_spikes = y_spikes[valid]
-        hd_spikes = hd_spikes[valid]
-        is_filt = is_filt[valid]  
-
-        u = np.cos(np.deg2rad(hd_spikes))
-        v = np.sin(np.deg2rad(hd_spikes))
-
-        # Assign colors efficiently
-        colors = np.where(is_filt, 'blue', 'red')
-
-        # Plot
-        ax2.scatter(x_spikes, y_spikes, color=colors)
-        ax2.set_xlim(xmin, xmax)
-        ax2.set_ylim(ymax, ymin)
-        ax2.set_aspect('equal')
-        if outline_x is not None and outline_y is not None:
-                ax2.plot(outline_x, outline_y, 'r-', lw=2, label='Maze outline')
-        ax2.set_title('Blue: within interval. Red: outside interval')
-        # Plot HD
+        plot_spikemap_interactive_rmap(spike_train, x, y, hd, is_filt, xmin, xmax, ymin, ymax, ax = ax2, outline_x = outline_x, outline_y = outline_y)
+        
+        # 3 Plot HD
         # Getting the spike times and making a histogram of them
          
         spikes_hd = hd[spike_train_filt]
         spikes_hd = spikes_hd[~np.isnan(spikes_hd)]
-        spikes_hd_rad = np.deg2rad(spikes_hd)
-    
+        #spikes_hd_rad = np.deg2rad(spikes_hd)
+        spikes_hd_rad = spikes_hd
         counts, bin_edges = np.histogram(spikes_hd_rad, bins=num_bins,range = [-np.pi, np.pi] )
 
-        
-        
+    
         # Calculating directional firing rate
         if hd_restrict is None:
             direction_firing_rate = np.divide(counts, occupancy_time, out=np.full_like(counts, 0, dtype=float), where=occupancy_time!=0)
         else:
             hd_filtered_r = hd_restrict[~np.isnan(hd_restrict)]
-            hd_filtered_r= np.deg2rad(hd_filtered_r)
+            #hd_filtered_r= np.deg2rad(hd_filtered_r)
             occupancy_counts_r, _ = np.histogram(hd_filtered_r, bins=num_bins, range = [-np.pi, np.pi])
             occupancy_time_r = occupancy_counts_r / frame_rate 
             direction_firing_rate = np.divide(counts, occupancy_time_r, out=np.full_like(counts, 0, dtype=float), where=occupancy_time_r!=0)
         # MRL adn significance
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
 
-        # Plotting
-        width = np.diff(bin_centers)[0]
-        ax3.bar(
-            bin_centers,
-            direction_firing_rate,
-            width=width,
-            bottom=0.0,
-            alpha=0.8
-        )
+        plot_directional_firingrate(bin_centers, direction_firing_rate, ax = ax3, title = f'n (in region): {len(spike_train_filt)}')
 
-        ax3.set_title(f'n (in region): {len(spike_train_filt)}')
-        
         # Spike count over time
         
         total_trial_length = 0
@@ -251,7 +181,6 @@ def plot_rmap_interactive(derivatives_base, unit_id, task, frame_rate = 25, samp
         trial_starts = np.concatenate(([0], trial_ends[:-1]))
 
         # Plot
-        spike_train_s = np.array(spike_train_unscaled)/sample_rate
         ax4.hist(spike_train_s, bins = np.int32(n_bins))
         # Vertical lines at trial boundaries
         for start in trial_starts[1:]:
@@ -266,6 +195,8 @@ def plot_rmap_interactive(derivatives_base, unit_id, task, frame_rate = 25, samp
 
         # Place trial labels
         for i, (start, end) in enumerate(zip(trial_starts, trial_ends)):
+            if last_trial_open_field and i == len(trial_starts) - 1:
+                break
             mid = (start + end) / 2
             ax4.text(mid, label_y, f'Trial {i+1}',
                     ha='center', va='top', fontsize=9, color='black')
@@ -342,7 +273,7 @@ def select_region(data, ax, x_edges, y_edges):
         X, Y = np.meshgrid(x_lin, y_lin)
 
         points = np.vstack((X.ravel(), Y.ravel())).T
-        path = Path(verts)
+        path = MplPath(verts)
         mask = path.contains_points(points).reshape((nx, ny)).T  # transpose back
         mask_container['mask'] = mask
         mask_container['done'] = True
@@ -365,71 +296,15 @@ def select_region(data, ax, x_edges, y_edges):
     return mask_container['mask']
 
 
-        
-def resultant_vector_length(alpha, w=None, d=None, axis=None,
-                            axial_correction=1, ci=None, bootstrap_iter=None):
-    """
-    Copied from Pycircstat documentation
-    Computes mean resultant vector length for circular data.
-
-    This statistic is sometimes also called vector strength.
-
-    :param alpha: sample of angles in radians
-    :param w: number of incidences in case of binned angle data
-    :param ci: ci-confidence limits are computed via bootstrapping,
-               default None.
-    :param d: spacing of bin centers for binned data, if supplied
-              correction factor is used to correct for bias in
-              estimation of r, in radians (!)
-    :param axis: compute along this dimension, default is None
-                 (across all dimensions)
-    :param axial_correction: axial correction (2,3,4,...), default is 1
-    :param bootstrap_iter: number of bootstrap iterations
-                          (number of samples if None)
-    :return: mean resultant length
-
-    References: [Fisher1995]_, [Jammalamadaka2001]_, [Zar2009]_
-    """
-    if axis is None:
-        axis = 0
-        alpha = alpha.ravel()
-        if w is not None:
-            w = w.ravel()
-
-    cmean = _complex_mean(alpha, w=w, axis=axis,
-                          axial_correction=axial_correction)
-
-    # obtain length
-    r = np.abs(cmean)
-
-    # for data with known spacing, apply correction factor to correct for bias
-    # in the estimation of r (see Zar, p. 601, equ. 26.16)
-    if d is not None:
-        if axial_correction > 1:
-            warnings.warn("Axial correction ignored for bias correction.")
-        r *= d / 2 / np.sin(d / 2)
-    return r
-
-
-def _complex_mean(alpha, w=None, axis=None, axial_correction=1):
-    # Copied from picircstat documentation
-    if w is None:
-        w = np.ones_like(alpha)
-    alpha = np.asarray(alpha)
-
-    assert w.shape == alpha.shape, "Dimensions of data " + str(alpha.shape) \
-                                   + " and w " + \
-        str(w.shape) + " do not match!"
-
-    return ((w * np.exp(1j * alpha * axial_correction)).sum(axis=axis) /
-            np.sum(w, axis=axis))       
 
 
 
 if __name__ == "__main__":
-    derivatives_base = r"S:\Honeycomb_maze_task\derivatives\sub-002_id-1R\ses-02_date-11092025\all_trials"
-    unit_id = 61
-    plot_rmap_interactive(derivatives_base, unit_id, task = 'hct')
+    derivatives_base = r"E:\Honeycomb_task_1g\derivatives\sub-001_id-2H\ses-01_date-01282026\first_run_2801"
+    unit_id = 228
+    task= "hct"
+    last_trial_open_field = True
+    plot_rmap_interactive(Path(derivatives_base), unit_id, task = "hct", last_trial_open_field=last_trial_open_field)
 
 
 

@@ -4,38 +4,43 @@ import glob
 import pandas as pd
 import numpy as np
 import json
+from pathlib import Path
 from HCT_analysis.utilities.restrict_spiketrain_specialbehav import restrict_spiketrain_specialbehav
 
-def ensure_sig_columns(consinks_df, goals):
+def ensure_sig_columns(consinks_df: pd.DataFrame, goals: list):
     for g in goals:
         for col in [f'ci_95_g{g}', f'ci_999_g{g}', f'sig_g{g}']:
             if col not in consinks_df.columns:
                 consinks_df[col] = np.nan
     return consinks_df
 
-def append_alltrials(derivatives_base):
+def append_alltrials(derivatives_base: Path):
     """ 
     Takes the alltrials csv and creates a new csv only with the rows of the trial date
 
     Args:
-        rawsession_folder (str): path to the rawdata folder
+    derivatives_base (Path): path to the derivatives_Base
     
     Exports:
-       rawsession/behaviour/alltrials_trialday.csvL alltrials filtered for only this day
+       rawsession/behaviour/alltrials_trialday.csv alltrials filtered for only this day
        
     NOTE: this will most likely still include trials that are not the trials we will use. These have to be removed later. 
     """
-    rawsession_folder =  derivatives_base.replace(r"\derivatives", r"\rawdata")
-    rawsession_folder = os.path.dirname(rawsession_folder)
+    rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent
     
-    folder = os.path.basename(rawsession_folder)        # Obtains session name, example: "ses-02_date-05092025"
+    folder = rawsession_folder.name     # Obtains session name, example: "ses-02_date-05092025"
     date = folder.split("date-")[-1]  # Obtains number after 'date', for example "05092025"
     
-    if os.path.exists(os.path.join(rawsession_folder,"behaviour", "alltrials_trialday.csv")):
+    trial_day_path = rawsession_folder / "behaviour"/ "alltrials_trialday.csv"
+    if trial_day_path.exists():
         print("Trialday csv exists, exiting")
         return
-    alltrials_paths = glob.glob(os.path.join(rawsession_folder,"behaviour" ,"alltrials*.csv"))
+    
+    
+    behaviour_folder = rawsession_folder / "behaviour"
+    alltrials_paths = list(behaviour_folder.glob("alltrials*.csv"))
     alltrials_path = alltrials_paths[0]
+
     
     df = pd.read_csv(alltrials_path)
     
@@ -44,12 +49,11 @@ def append_alltrials(derivatives_base):
         date = date[1:]
 
     df = df[df['Date'] == int(date)]
-    
-    output_path = os.path.join(rawsession_folder,"behaviour", "alltrials_trialday.csv")
+    output_path = rawsession_folder / "behaviour" / "alltrials_trialday.csv"
     df.to_csv(output_path, index=False)
     print(f"Created {output_path}")
 
-def get_pos_data(derivatives_base, rel_dir_occ):
+def get_pos_data(derivatives_base, rel_dir_occ, goals_to_include):
     """ Get positional data"""
     # Loading xy data
     pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD',
@@ -61,12 +65,12 @@ def get_pos_data(derivatives_base, rel_dir_occ):
 
     pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD',
                                  'XY_HD_goal0_trials.csv')
-    try:
+    if 0 in goals_to_include:
         pos_data_g0 = pd.read_csv(pos_data_path)
 
         if np.nanmax(pos_data_g0['hd']) > 2 * np.pi + 0.1:  # Check if angles are in radians
             pos_data_g0['hd'] = np.deg2rad(pos_data_g0['hd'])
-    except:
+    else:
         pos_data_g0 = None
         print("No data found for g0. Returning None")
 
@@ -77,12 +81,15 @@ def get_pos_data(derivatives_base, rel_dir_occ):
     if np.nanmax(pos_data_g1['hd']) > 2 * np.pi + 0.1:  # Check if angles are in radians
         pos_data_g1['hd'] = np.deg2rad(pos_data_g1['hd'])
 
-    pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD',
-                                 'XY_HD_goal2_trials.csv')
-    pos_data_g2 = pd.read_csv(pos_data_path)
+    if 2 in goals_to_include:
+        pos_data_path = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD',
+                                    'XY_HD_goal2_trials.csv')
+        pos_data_g2 = pd.read_csv(pos_data_path)
 
-    if np.nanmax(pos_data_g2['hd']) > 2 * np.pi + 0.1:  # Check if angles are in radians
-        pos_data_g2['hd'] = np.deg2rad(pos_data_g2['hd'])
+        if np.nanmax(pos_data_g2['hd']) > 2 * np.pi + 0.1:  # Check if angles are in radians
+            pos_data_g2['hd'] = np.deg2rad(pos_data_g2['hd'])
+    else:
+        pos_data_g2 = None
 
     # Getting the positional data we'll use for the rel_dir_occ
     if rel_dir_occ == 'all trials':
@@ -161,7 +168,7 @@ def verify_allnans(spike_train, pos_data):
     else:
         return False
 
-def get_goal_numbers(derivatives_base):
+def get_goal_numbers(derivatives_base: Path) -> list[int]:
     """
     Obtains goal numbers from alltrials_trialday.csv
     
@@ -171,15 +178,12 @@ def get_goal_numbers(derivatives_base):
     Returns:
         [goal1, goal2]
     """
-    rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
-    rawsession_folder = os.path.dirname(rawsession_folder)
+    rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent
     
-    df_path = os.path.join(rawsession_folder, "behaviour", "alltrials_trialday.csv")
+    df_path = rawsession_folder/"behaviour"/"alltrials_trialday.csv"
     df = pd.read_csv(df_path)
     goal1 = df['Goal 1'].values[0]
     goal2 = df['Goal 2'].values[0]
-    
-        
     return [np.int32(goal1), np.int32(goal2)]
 
 def get_coords(derivatives_base):

@@ -13,7 +13,7 @@ from HCT_analysis.utilities.trials_utils import ensure_sig_columns, get_goal_num
 import matplotlib
 from HCT_analysis.turn_restricteddf_frames import turn_restricteddf_frames
 from HCT_analysis.plotting.plot_sinks import  plot_all_consinks_127sinks
-from HCT_analysis.find_consinks_main_functions import get_reldir_bin_idx, calculate_averagesink, find_consink, get_reldir_occ_wholemaze, recalculate_consink_to_all_candidates_from_translation, find_consink_method2, find_consink_method3, get_dir_allframes
+from HCT_analysis.find_consinks_main_functions import export_sig_sinks, get_reldir_bin_idx, calculate_averagesink, find_consink, get_reldir_occ_wholemaze, recalculate_consink_to_all_candidates_from_translation, find_consink_method2, find_consink_method3, get_dir_allframes
 from maze_and_platforms.overlay_maze_image_consinks import overlay_maze_image_consinks
 num_candidate_sinks = 127
 from astropy.stats import circmean
@@ -35,41 +35,6 @@ NOTE: Potential issues to still look at: if ctrl distribution has low values in 
 This can be fixed by setting a threshold for min occupancy in ctrl distribution
 Threshold hasn't been decided yet
 """
-def export_sig_sinks(methods,output_folder,goals_to_include=[0, 1, 2]):
-    """
-    Export ONLY unit IDs of significant consinks.
-    One file per method, containing a dict: {goal: np.array(unit_ids)}
-    """
-
-    for method in methods:
-        consinks_df = load_pickle(f'consinks_df_m{method}', output_folder)
-
-        sig_units_per_goal = {}
-
-        for g in goals_to_include:
-            sig_col = f'sig_g{g}'
-            if sig_col not in consinks_df.columns:
-                print(f"[Method {method}] No column {sig_col}, skipping")
-                continue
-
-            unit_ids = consinks_df.index[
-                consinks_df[sig_col] == 'sig'
-            ].to_numpy()
-
-            sig_units_per_goal[g] = unit_ids.astype(int)
-
-            print(
-                f"[Method {method}, Goal {g}] "
-                f"{len(unit_ids)} significant units"
-            )
-
-        save_path = os.path.join(
-            output_folder,
-            f'significant_consink_unit_ids_method_{method}.npy'
-        )
-        np.save(save_path, sig_units_per_goal, allow_pickle=True)
-
-        print(f"[Method {method}] Saved → {save_path}")
 
 def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
          unit_type: Literal['pyramidal', 'good', 'all', 'test'], methods = [1,2,3],  code_to_run=[-1, 0, 1,2,3,4], goals_to_include = [0,1,2], show_plots = True, frame_rate=25, sample_rate=30000):
@@ -93,7 +58,7 @@ def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
     unit_ids = get_unit_ids(derivatives_base, unit_ids, unit_type)
 
     # Loading xy data
-    pos_data, pos_data_g0, pos_data_g1, pos_data_g2, pos_data_reldir = get_pos_data(derivatives_base, rel_dir_occ)
+    pos_data, pos_data_g0, pos_data_g1, pos_data_g2, pos_data_reldir = get_pos_data(derivatives_base, rel_dir_occ, goals_to_include)
 
     # restricted df frames
     path = os.path.join(rawsession_folder, 'task_metadata', 'restricted_df_frames.csv')
@@ -330,21 +295,23 @@ def plot_fantail_mean_angles(derivatives_base, methods, output_folder, goals_to_
         figsize=(6 * n_goals, 4*len(methods)),
         subplot_kw={'projection': 'polar'}
     )
-    plt.suptitle(title, size = 20)
-    if n_goals == 1:
-        axes = [axes]
+    axes = np.atleast_2d(axes)
+    plt.suptitle(title)
+
 
     for i_m, method in enumerate(methods):
         consinks_df = load_pickle(f'consinks_df_m{method}', output_folder)
 
         for i_g, g in enumerate(goals_to_include):
-            ax = axes[i_m, i_g]
+            ax = axes[i_g, i_m]
 
             sig_mask = consinks_df[f'sig_g{g}'] == 'sig'
             angles = consinks_df.loc[sig_mask, f'mean_angle_g{g}'].values
+            angles = np.asarray(angles, dtype=float)
             if len(angles) == 0:
                 ax.set_title(f'Method {method}, Goal {g}\nNo significant units')
                 continue
+            
             angles = angles[np.isfinite(angles)]
 
             if len(angles) == 0:

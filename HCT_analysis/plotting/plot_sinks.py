@@ -5,81 +5,73 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import RegularPolygon
 from matplotlib.patches import Patch
 
-def plot_all_consinks(consinks_df, goal_coordinates, hcoord, vcoord, limits, jitter, plot_dir, plot_name='ConSinks'):
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from typing import Sequence, Tuple, Dict
+import matplotlib.pyplot as plt
+from matplotlib.patches import RegularPolygon
+
+
+def plot_all_consinks(consinks_df: pd.DataFrame,goal_coordinates: list,hcoord: list,vcoord: list,limits:dict,jitter,plot_dir: Path,plot_name: str = "ConSinks",) -> None:
+    """
+    Plot consinks for three goals in separate subplots.
+
+    Parameters
+    ----------
+    consinks_df : pd.DataFrame  DataFrame indexed by cluster containing 'position_g{g}' and 'sig_g{g}' columns.
+    goal_coordinates : list  List of (x, y) goal coordinate tuples.
+    hcoord : list  X coordinates of hexagon centres.
+    vcoord : list  Y coordinates of hexagon centres.
+    limits : dict  Dictionary with keys 'x_min', 'x_max', 'y_min', and 'y_max'.
+    jitter : tuple  Maximum jitter range applied in x and y directions.
+    plot_dir : Path  Directory where the figure will be saved.
+    plot_name : str  Name of the saved figure (without extension).
+
+    Returns
+    -------
+    None  Saves the figure to disk.
+    """
+
     num_goals = 3
-    # Create two subplots
     fig, axes = plt.subplots(1, num_goals, figsize=(30, 10))
     axes = axes.flatten()
     fig.suptitle(plot_name, fontsize=24)
 
     for g in range(num_goals):
         ax = axes[g]
-        ax.set_xlabel('x position (cm)', fontsize=16)
-        ax.set_ylabel('y position (cm)', fontsize=16)
 
-        # Add some coloured hexagons and adjust the orientation to match the rotated grid
         for i, (x, y) in enumerate(zip(hcoord, vcoord)):
-            hex = RegularPolygon((x, y), numVertices=6, radius=83,
-                                 orientation=np.radians(28),  # Rotate hexagons to align with grid
-                                 facecolor='grey', alpha=0.2, edgecolor='k')
-            ax.text(x, y, i + 1, ha='center', va='center', size=15)  # Start numbering from 1
-            ax.add_patch(hex)
-
-        # Also add scatter points in hexagon centres
-        ax.scatter(hcoord, vcoord, alpha=0, c='grey')
-        # plot the goal positions
-        if g > 0:
-            circle = plt.Circle(goal_coordinates[g - 1], 80, color='g',
-                                fill=False, linewidth=5)
-            ax.add_artist(circle)
-            title = f'Goal {g}'
-        else:
-            title = 'G1 but going to G2'
-        ax.set_title(title, fontsize=20)
-        # loop through the rows of the consinks_df, plot a filled red circle at the consink
-        # position if the mrl is greater than ci_999
-
-        clusters = []
-        consink_positions = []
+            hexagon = RegularPolygon((x, y),numVertices=6,radius=83,orientation=np.radians(28),facecolor="grey",alpha=0.2,edgecolor="k")
+            ax.add_patch(hexagon)
 
         for cluster in consinks_df.index:
+            pos = consinks_df.loc[cluster, f"position_g{g}"]
+            sig = consinks_df.loc[cluster, f"sig_g{g}"]
 
-            x_jitter = np.random.uniform(-jitter[0], jitter[0])
-            y_jitter = np.random.uniform(-jitter[1], jitter[1])
-
-            consink_position = consinks_df.loc[cluster, 'position_g' + str(g)]
-
-            sig = consinks_df.loc[cluster, 'sig_g' + str(g)]
             if sig == "sig":
-                circle = plt.Circle((consink_position[0] + x_jitter,
-                                     consink_position[1] + y_jitter), 60, color='r',
-                                    fill=True)
-                ax.add_artist(circle)
+                x_j = np.random.uniform(-jitter[0], jitter[0])
+                y_j = np.random.uniform(-jitter[1], jitter[1])
+                ax.add_artist(plt.Circle((pos[0] + x_j, pos[1] + y_j),60,color="r",fill=True,))
 
-                clusters.append(cluster)
-                consink_positions.append(consink_position)
+        ax.set_xlim(limits["x_min"] - 200, limits["x_max"] + 200)
+        ax.set_ylim(limits["y_min"] - 200, limits["y_max"] + 200)
+        ax.set_aspect("equal")
+        ax.invert_yaxis()
 
-            # set the x and y limits
-            ax.set_xlim((limits['x_min'] - 200, limits['x_max'] + 200))
-            ax.set_ylim(limits['y_min'] - 200, limits['y_max'] + 200)
-
-            # reverse the y axis
-            ax.invert_yaxis()
-
-            # make the axes equal
-            ax.set_aspect('equal')
-
-    plt.savefig(os.path.join(plot_dir, plot_name + '.png'))
-    print(f"Saved figure to {os.path.join(plot_dir, plot_name + '.png')}")
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    save_path = plot_dir / f"{plot_name}.png"
+    plt.savefig(save_path)
     plt.show()
+
 
 def plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platforms_trans, jitter, plot_dir, average_sink = None, show_plots = True,  goals_to_include = [0,1,2], plot_name='ConSinks'):
     num_goals = len(goals_to_include)
     # Create two subplots
-    fig, axes = plt.subplots(1, num_goals, figsize=(10*(num_goals - 1), 10))
+    fig, axes = plt.subplots(1, num_goals, figsize=(10*num_goals, 10))
     axes = np.atleast_1d(axes)
     axes = axes.flatten()
-    fig.suptitle(plot_name, fontsize=24)
+    fig.suptitle(plot_name)
 
     for pos, g in enumerate(goals_to_include):
         ax = axes[pos]
@@ -107,10 +99,6 @@ def plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platfo
 
         # Also add scatter points in hexagon centres
         ax.scatter(hcoord, vcoord, alpha=0, c='grey')
-        # plot the goal positions
-
-        # loop through the rows of the consinks_df, plot a filled red circle at the consink
-        # position if the mrl is greater than ci_999
 
         clusters = []
         num_sig_clusters = 0
@@ -125,25 +113,13 @@ def plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platfo
             sig = consinks_df.loc[cluster, 'sig_g' + str(g)]
             if sig == "sig":
                 num_sig_clusters += 1
-                try:
-                    circle = plt.Circle((hcoord[np.int32(consink_plat)-1] + x_jitter,
-                                     vcoord[np.int32(consink_plat) - 1] + y_jitter), 30, color='r',
-                                    fill=True)
-                except:
-                    breakpoint()
+                circle = plt.Circle((hcoord[np.int32(consink_plat)-1] + x_jitter,vcoord[np.int32(consink_plat) - 1] + y_jitter), 30, color='r',fill=True)
                 ax.add_artist(circle)
                 mrl_vals.append(consinks_df.loc[cluster, 'mrl_g' + str(g)])
-
                 clusters.append(cluster)
 
-        if average_sink[g] is not None and not np.isnan(average_sink[g]):
-            circle = plt.Circle(
-                (average_sink[g][0], average_sink[g][1]),
-                40,
-                color='b',
-                fill=True,
-                label='Average sink'
-            )
+        if average_sink[g] is not None and not np.isnan(average_sink[g].any()):
+            circle = plt.Circle((average_sink[g][0], average_sink[g][1]),40,color='b',fill=True,label='Average sink')
 
             ax.add_patch(circle)
             ax.legend()
@@ -157,7 +133,7 @@ def plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platfo
         else:
             title = f'G1 but going to G2, num sig consinks: {num_sig_clusters}, mean mrl = {np.round(np.mean(mrl_vals),3)}'
         ax.set_title(title, fontsize=20)
-        
+    
     plt.savefig(os.path.join(plot_dir, plot_name + '.png'))
     print(f"Saved figure to {os.path.join(plot_dir, plot_name + '.png')}")
     if show_plots:
