@@ -9,6 +9,23 @@ from spikeinterface.core import BaseRecording, BaseSorting, SortingAnalyzer
 UnitTypes = Literal['pyramidal', 'good', 'all']
 Methods = Literal["ears", "center"]
 
+def get_spiketrain_from_dict(derivatives_base: Path, speed_filt: bool = False, goal: int = 3):
+    """ Gets spiketrain dictionary"""
+    pos_folder = derivatives_base / "analysis/cell_characteristics/unit_features/spike_times"
+    
+    if goal == 3: #full trial
+        if speed_filt:
+            spike_dict = np.load(pos_folder / 'spike_times_speedfilt.npy', allow_pickle=True).item()
+        else:
+            spike_dict = np.load(pos_folder / 'spike_times_frames.npy', allow_pickle = True).item()
+    else:
+        if speed_filt:
+            spike_dict = np.load(pos_folder / f'spike_times_frames_speedfilt_g{goal}.npy', allow_pickle=True).item()
+        else:
+            spike_dict = np.load(pos_folder / f'spike_times_frames_g{goal}.npy', allow_pickle = True).item()
+
+    return spike_dict
+
 def load_unit_ids(derivatives_base: Path, unit_type: UnitTypes, unit_ids: list) -> list:
     """ Returns unit_ids, the unit_ids that we will create rmaps for"""
     if unit_type == 'good':
@@ -19,7 +36,7 @@ def load_unit_ids(derivatives_base: Path, unit_type: UnitTypes, unit_ids: list) 
     elif unit_type == 'pyramidal':
         pyramidal_units_path = derivatives_base/"analysis"/"cell_characteristics"/"unit_features"/"all_units_overview"/"pyramidal_units_2D.csv"
         pyramidal_units_df = pd.read_csv(pyramidal_units_path)
-        pyramidal_units = pyramidal_units_df['unit_ids'].values
+        pyramidal_units = pyramidal_units_df.iloc[:, 0].values
         unit_ids = pyramidal_units
         print("Using pyramidal units")
     elif unit_type == "all":

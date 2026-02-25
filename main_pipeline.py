@@ -12,6 +12,8 @@ from preprocessing.postprocessing_spikeinterface import run_spikeinterface
 from preprocessing.append_config import append_config
 from preprocessing.find_paths import find_paths
 from preprocessing.make_epoch_times_csv import make_epoch_times_csv
+from unit_features.export_unit_spiketimes import export_unit_spiketimes
+from unit_features.get_spiketimes_allunits import get_spiketimes_alltrials
 import torch
 from pathlib import Path
 # basic processing preprocesses the data and makes spatial plots
@@ -25,10 +27,13 @@ subject_number = "001"
 session_number = "02"
 trial_session_name = "second_run_1602" 
 trial_numbers = np.arange(1,14)
+goals_to_include = [1]
 if len(trial_numbers) == 1:
     concat_runs = False
 else:
     concat_runs = True
+frame_rate = 25
+sample_rate = 30000
     
 # Verify GPU is used
 print(torch.cuda.is_available())
@@ -74,3 +79,9 @@ run_spikewrap(derivatives_base, rawsubject_folder, session_name, concat_runs = c
 # === Post processing ===
 run_spikeinterface(derivatives_base, run_analyzer_from_memory=False, run_df_from_memory=False, clear_plot_folder=False)
 
+# === Getting spiketimes for all the cells exported =====
+export_unit_spiketimes(derivatives_base, goals_to_include, add_speed_filt = False, frame_rate = frame_rate, sample_rate = sample_rate)
+
+
+# ==== Getting the spiketimes per trial for each unit exported
+get_spiketimes_alltrials(derivatives_base, speed_filt = False, frame_rate = frame_rate)

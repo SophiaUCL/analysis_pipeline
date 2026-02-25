@@ -91,14 +91,12 @@ def run_movement(derivatives_base: Path, trials_to_include: list, conf_threshold
     
         speed = calculate_speed(x, y, pixels_per_cm, frame_rate)
         #velocity = compute_velocity_movement(position, pixels_per_cm, frame_rate)
-        speed_bool = speed >= 2
-        speed_bool = speed_bool.astype(float)      # True→1.0, False→0.0
-        speed_bool[np.isnan(speed)] = np.nan
+
         # HD that we'll be using: orthogonal to xy
         hd  = hd_orth_ears.values if hasattr(hd_orth_ears, "values") else hd_orth_ears
 
         # Save x, y, and hd to df
-        save_to_df(x, y, hd, positional_data_folder,  f"XY_HD_t{tr}.csv", speed = speed_bool)
+        save_to_df(x, y, hd, positional_data_folder,  f"XY_HD_t{tr}.csv", speed = speed)
 
 
         # ------------- Plotting trajectory------------- 

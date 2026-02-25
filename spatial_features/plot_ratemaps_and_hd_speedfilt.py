@@ -7,7 +7,9 @@ from tqdm import tqdm
 from typing import Literal
 from pathlib import Path
 import shutil
-print("RUNNING FILE:", os.path.abspath(__file__))
+import sys
+project_root = Path(__file__).resolve().parent.parent
+sys.path.append(str(project_root))
 from spatial_features.utils.spatial_features_utils import get_spiketrain_from_dict, add_relative_hd, get_goal_coordinates, get_goal_numbers, get_ratemaps_restrictedx, load_unit_ids, get_outline, get_limits, get_posdata, get_occupancy_time, get_ratemaps, get_spike_train_frames, get_directional_firingrate
 from spatial_features.utils.spatial_features_plots import plot_rmap, plot_occupancy, plot_directional_firingrate
 from spatial_features.utils.restrict_spiketrain_specialbehav import get_spike_train, restrict_spiketrain_specialbehav
@@ -15,9 +17,9 @@ from spatial_features.utils.restrict_spiketrain_specialbehav import get_spike_tr
 
 UnitTypes = Literal['pyramidal', 'good', 'all']
 
-def plot_ratemaps_and_hd_pergoal(derivatives_base: Path, unit_type: UnitTypes, goals_to_include: np.ndarray | list = [0,1,2], include_open_field: bool = False, save_plots: bool=True, show_plots= False,clear_plot_folder: bool = False, frame_rate: int = 25, sample_rate: int = 30000):
+def plot_ratemaps_and_hd_speedfilt(derivatives_base: Path, unit_type: UnitTypes, goals_to_include: np.ndarray | list = [0,1,2], include_open_field: bool = False, save_plots: bool=True, show_plots= False,clear_plot_folder: bool = False, frame_rate: int = 25, sample_rate: int = 30000):
     """ 
-    Makes a plot for each unit with its ratemap per goal and also one for when its speed filtered
+    Makes a plot for each unit with its ratemap per goal
     
     Inputs
     -------
@@ -34,8 +36,8 @@ def plot_ratemaps_and_hd_pergoal(derivatives_base: Path, unit_type: UnitTypes, g
     ---------
     derivatives_base/'analysis'/ 'cell_characteristics'/'spatial_features'/ 'ratemaps_and_hd_allgoals'
     """
-    binsize = 80
-    threshold = [1.6, 1] # THRESHOLD FOR RMAP OCCUPANCY
+    binsize = 48
+    threshold = [2, 2.5, 2] # THRESHOLD FOR RMAP OCCUPANCY
     
     rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent
     # Load data files
@@ -46,7 +48,7 @@ def plot_ratemaps_and_hd_pergoal(derivatives_base: Path, unit_type: UnitTypes, g
     unit_ids = sorting.unit_ids
     
     # Output folder
-    output_folder = derivatives_base/'analysis'/ 'cell_characteristics'/'spatial_features'/ 'ratemaps_and_hd_allgoals'
+    output_folder = derivatives_base/'analysis'/ 'cell_characteristics'/'spatial_features'/ 'ratemaps_and_hd_speedfilt'
     if clear_plot_folder:
         print("Clearing output folder")
         shutil.rmtree(output_folder)
@@ -117,53 +119,53 @@ def plot_ratemaps_and_hd_pergoal(derivatives_base: Path, unit_type: UnitTypes, g
     print(f"Saving results to {output_folder}")
     for unit_id in tqdm(unit_ids):
         # Make plot
-        fig, axs = plt.subplots(2, len(goals), figsize = [len(goals)*5, 10])
+        fig, axs = plt.subplots(2, len(goals)*2, figsize = [len(goals)*5*2, 10])
         fig.suptitle(f"Unit {unit_id}", fontsize = 18)
         for column, g in enumerate(goals):
+            for speed_filt in {False, True}:
+                if g == 2 or g ==1 :
+                    name = f"Goal {g}"
+                elif g == 3:
+                    name = "Full recording"
+                elif g == 4:
+                    name = "Open Field"
+                    
+                if speed_filt:
+                    name = name + " speed filtered"
+                x_g = x_allg[column]
+                y_g = y_allg[column]
+                occupancy_time_g = occupancy_time_allg[column]
+                #rel_occupancy_time_g = rel_occupancy_time_allg[column -1] if g !=0 and g !=3 and g != 4 else None
+                threshold_occ = threshold[column]
+                if g == 1:
+                    relhd_fulltrial = relhd_fulltrial_g1
+                elif g == 2:
+                    relhd_fulltrial = relhd_fulltrial_g2
+                
+                dict = get_spiketrain_from_dict(derivatives_base, speed_filt = speed_filt, goal=g)
+                spike_train = dict[unit_id]
+
+                
+                # ===== Plot ratemap ====
+
+                rmap, x_edges, y_edges=  get_ratemaps_restrictedx(spike_train, x_fulltrial, y_fulltrial, x_g, y_g, occupancy_threshold = threshold_occ, binsize = binsize)
+                plot_rmap(rmap, xmin, xmax, ymin, ymax, x_edges, y_edges, outline_x, outline_y, ax = axs[0, column*2 + speed_filt], fig = fig, title = f"{name}, n = {len(spike_train)}")
+
             
-            if g == 2 or g ==1 :
-                name = f"Goal {g}"
-            elif g == 3:
-                name = "Full recording"
-            elif g == 4:
-                name = "Open Field"
-            
-            x_g = x_allg[column]
-            y_g = y_allg[column]
-            occupancy_time_g = occupancy_time_allg[column]
-            #rel_occupancy_time_g = rel_occupancy_time_allg[column -1] if g !=0 and g !=3 and g != 4 else None
-            threshold_occ = threshold[column ]
-            if g == 1:
-                relhd_fulltrial = relhd_fulltrial_g1
-            elif g == 2:
-                relhd_fulltrial = relhd_fulltrial_g2
-            
-            if g < 4:
-                # Load spike data for this goal in frames
-                spike_train = get_spike_train(sorting, sample_rate, rawsession_folder, unit_id, g, frame_rate, x_g)
-            else:
-                spike_train = get_spike_train(sorting, sample_rate, rawsession_folder, unit_id, g, frame_rate, x_fulltrial)
+                # === Plot HD ===
+                axs[1, column*2 + speed_filt].remove()
+                axs[1, column*2 + speed_filt] = fig.add_subplot(2, len(goals)*2, len(goals)*2 + 2*column +  speed_filt + 1, projection="polar")
 
+
+                try:
+                    direction_firing_rate, bin_centers = get_directional_firingrate(hd_fulltrial, spike_train, num_bins, occupancy_time_g)
+                except:
+                    breakpoint()
+                #fig.delaxes(axs[1,column])
+                #axs[1, column] = fig.add_subplot(2, len(goals), len(goals) + column + 1, polar=True)
+                plot_directional_firingrate(bin_centers, direction_firing_rate, ax = axs[1,column*2 + speed_filt])
 
             
-            # ===== Plot ratemap ====
-
-            rmap, x_edges, y_edges=  get_ratemaps_restrictedx(spike_train, x_fulltrial, y_fulltrial, x_g, y_g, occupancy_threshold = threshold_occ, binsize = binsize)
-            plot_rmap(rmap, xmin, xmax, ymin, ymax, x_edges, y_edges, outline_x, outline_y, ax = axs[0, column], fig = fig, title = f"{name}, n = {len(spike_train)}")
-
-        
-            # === Plot HD ===
-            axs[1, column].remove()
-            axs[1, column] = fig.add_subplot(2, len(goals), len(goals) + column + 1, projection="polar")
-
-
-
-            direction_firing_rate, bin_centers = get_directional_firingrate(hd_fulltrial, spike_train, num_bins, occupancy_time_g)
-            
-            #fig.delaxes(axs[1,column])
-            #axs[1, column] = fig.add_subplot(2, len(goals), len(goals) + column + 1, polar=True)
-            plot_directional_firingrate(bin_centers, direction_firing_rate, ax = axs[1,column])
-
 
         output_path = output_folder/ f"unit_{unit_id}_rm_hd.png"
         if save_plots:
@@ -178,8 +180,9 @@ def plot_ratemaps_and_hd_pergoal(derivatives_base: Path, unit_type: UnitTypes, g
     print(f"Saved plots to {output_folder}")
         
 if __name__ == "__main__":    
-    derivatives_base = r"E:\Honeycomb_task_1g\derivatives\sub-001_id-2H\ses-01_date-01282026\first_run_2801"
-    plot_ratemaps_and_hd_pergoal(derivatives_base,unit_type = "pyramidal", include_g0 = False, saveplots=True, show_plots=True)
+    derivatives_base = r"E:\Honeycomb_task_1g\derivatives\sub-001_id-2H\ses-02_date-12022026\second_run_1602"
+    derivatives_base = Path(derivatives_base)
+    plot_ratemaps_and_hd_speedfilt(derivatives_base,unit_type = "pyramidal", goals_to_include = [1], save_plots=True, show_plots=False)
 
 
 

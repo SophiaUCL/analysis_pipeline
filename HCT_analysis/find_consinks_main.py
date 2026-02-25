@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from HCT_analysis.calculate_occupancy import get_direction_bins, \
      get_relative_direction_occupancy_by_position_platformbins
 from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
-from HCT_analysis.utilities.trials_utils import ensure_sig_columns, get_goal_numbers, get_coords_127sinks, get_unit_ids, get_pos_data, get_spike_train, get_sink_positions_platforms, translate_positions
+from HCT_analysis.utilities.trials_utils import get_spiketrain_from_dict, ensure_sig_columns, get_goal_numbers, get_coords_127sinks, get_unit_ids, get_pos_data, get_spike_train, get_sink_positions_platforms, translate_positions
 import matplotlib
 from HCT_analysis.turn_restricteddf_frames import turn_restricteddf_frames
 from HCT_analysis.plotting.plot_sinks import  plot_all_consinks_127sinks
@@ -37,7 +37,9 @@ Threshold hasn't been decided yet
 """
 
 def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
-         unit_type: Literal['pyramidal', 'good', 'all', 'test'], methods = [1,2,3],  code_to_run=[-1, 0, 1,2,3,4], goals_to_include = [0,1,2], show_plots = True, frame_rate=25, sample_rate=30000):
+         unit_type: Literal['pyramidal', 'good', 'all', 'test'], methods = [1,2,3],  code_to_run=[-1, 0, 1,2,3,4], 
+         goals_to_include = [0,1,2], speed_filt = False, 
+         show_plots = True, frame_rate=25, sample_rate=30000):
     """
     Code to find consinks, based on Jake's code
 
@@ -45,8 +47,7 @@ def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
     """
     print(f"Calculating consinks using methods {methods}")
     # Path to rawsession folder
-    rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
-    rawsession_folder = os.path.dirname(rawsession_folder)
+    rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent
 
    
     # Loading spike data
@@ -117,8 +118,8 @@ def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
     for method in methods:
         # Constructing title
 
-        subject_id = derivatives_base.split(os.sep)[3]
-        session_id = derivatives_base.split(os.sep)[4]
+        subject_id = str(derivatives_base).split(os.sep)[3]
+        session_id = str(derivatives_base).split(os.sep)[4]
         title = f"Consinks {subject_id}_{session_id}, {unit_type} units, method {method}"
         consinks = {}
 
@@ -138,8 +139,8 @@ def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
                         reldir_occ_by_pos_cur = reldir_occ_by_pos
 
 
-                    spike_train = get_spike_train(sorting, unit_id, pos_data, rawsession_folder, g=g, frame_rate=frame_rate,
-                                                sample_rate=sample_rate)
+                    spike_dict = get_spiketrain_from_dict(derivatives_base, speed_filt = speed_filt, goal = g)
+                    spike_train = spike_dict[unit_id]
                     # Skip empty spikes
                     if len(spike_train) < min_num_spikes:
                         consinks[unit_id][f'numspikes_g{g}'] = len(spike_train)
@@ -220,8 +221,8 @@ def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
 
                     
 
-                    spike_train = get_spike_train(sorting, unit_id, pos_data, rawsession_folder, g=g, frame_rate=frame_rate,
-                                                sample_rate=sample_rate)
+                    spike_dict = get_spiketrain_from_dict(derivatives_base, speed_filt = speed_filt, goal = g)
+                    spike_train = spike_dict[unit_id]
                     if len(spike_train) < min_num_spikes:
                         continue
                     ci = recalculate_consink_to_all_candidates_from_translation(spike_train, pos_data,

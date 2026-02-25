@@ -4,7 +4,7 @@ from HCT_analysis.calculate_occupancy import get_axes_limits
 import pandas as pd
 from HCT_analysis.utilities.load_and_save_data import save_pickle, load_pickle
 import spikeinterface.extractors as se
-from HCT_analysis.utilities.trials_utils import get_spike_train, get_limits_from_json
+from HCT_analysis.utilities.trials_utils import get_spike_train, get_limits_from_json, get_spiketrain_from_dict
 import json
 from tqdm import tqdm
 
@@ -132,7 +132,7 @@ def get_directional_occupancy_by_position(dlc_data, limits, frame_rate=25, n_dir
                             'x_bins': x_bins_og, 'y_bins': y_bins_og, 'direction_bins': direction_bins}
     return directional_occupancy_by_position
 
-def bin_spikes_by_position_and_direction_individual_units(unit_ids, sorting, rawsession_folder, directional_occupancy_by_position, pos_data, frame_rate = 25, sample_rate = 30000, goal = -1):
+def bin_spikes_by_position_and_direction_individual_units(unit_ids, sorting, derivatives_base, directional_occupancy_by_position, pos_data, speed_filt: bool = False, frame_rate = 25, sample_rate = 30000, goal = -1):
     
     # get the x and y bins
     x_bins_og = directional_occupancy_by_position['x_bins']
@@ -163,12 +163,13 @@ def bin_spikes_by_position_and_direction_individual_units(unit_ids, sorting, raw
     spike_rates_by_position_and_direction = {'units': {}, 'x_bins': x_bins_og, 
                     'y_bins': y_bins_og, 'direction_bins': direction_bins_og}
 
-    
+    spiketrain_dict = get_spiketrain_from_dict(derivatives_base, speed_filt = speed_filt, goal = goal)
     for u in tqdm(unit_ids):
-        spike_train = get_spike_train(sorting, u, pos_data, rawsession_folder, goal, frame_rate=25, sample_rate=30000)
+        spike_train = spiketrain_dict[u]
         if len(spike_train) == 0:
             continue
         # Finding spike times for this unit
+
         x = x_org[spike_train]
         y = y_org[spike_train]
         hd = hd_org[spike_train]
@@ -230,7 +231,7 @@ def bin_spikes_by_position_and_direction_individual_units(unit_ids, sorting, raw
     return spike_rates_by_position_and_direction
 
 
-def main(derivatives_base,  code_to_run = [0,1], goals_to_include = [0,1,2]):
+def main(derivatives_base,  code_to_run = [0,1], goals_to_include = [0,1,2], speed_filt: bool = False):
     """
     Main function to calculate directional occupancy by position and spike rates by position and direction.
     NOTE currently does this for all cells, not just good ones
@@ -240,8 +241,6 @@ def main(derivatives_base,  code_to_run = [0,1], goals_to_include = [0,1,2]):
         code_to_run (list, optional): List of codes to run. Defaults to [].
         
     """
-    rawsession_folder = derivatives_base.replace(r"\derivatives", r"\rawdata")
-    rawsession_folder =os.path.dirname(rawsession_folder)
     
     # Used to calculate spike_rates_by_position_and_direction
     x_min, x_max, y_min, y_max = get_limits_from_json(derivatives_base)
@@ -305,8 +304,8 @@ def main(derivatives_base,  code_to_run = [0,1], goals_to_include = [0,1,2]):
 
             directional_occupancy_by_position_goal = load_pickle(f'directional_occupancy_by_position_g{g}', output_folder)
 
-            spike_rates_by_position_and_direction_goal = bin_spikes_by_position_and_direction_individual_units(unit_ids, sorting, rawsession_folder,
-                                                    directional_occupancy_by_position_goal, pos_data_goal, goal=g)
+            spike_rates_by_position_and_direction_goal = bin_spikes_by_position_and_direction_individual_units(unit_ids, sorting, derivatives_base,
+                                                    directional_occupancy_by_position_goal, pos_data, goal=g, speed_filt = speed_filt)
             # save the spike rates by position and direction
             save_pickle(spike_rates_by_position_and_direction_goal, f'spike_rates_by_position_and_direction_g{g}', output_folder)
             

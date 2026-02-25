@@ -104,7 +104,6 @@ def plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platfo
         num_sig_clusters = 0
         mrl_vals = []
         for cluster in consinks_df.index:
-
             x_jitter = np.random.uniform(-jitter[0], jitter[0])
             y_jitter = np.random.uniform(-jitter[1], jitter[1])
 
@@ -120,7 +119,6 @@ def plot_all_consinks_127sinks(consinks_df, goal_numbers, hcoord, vcoord, platfo
 
         if average_sink[g] is not None and not np.isnan(average_sink[g].any()):
             circle = plt.Circle((average_sink[g][0], average_sink[g][1]),40,color='b',fill=True,label='Average sink')
-
             ax.add_patch(circle)
             ax.legend()
         # make the axes equal

@@ -13,9 +13,11 @@ from HCT_analysis.plotting.make_maze_plots import make_maze_behaviour_plots
 from spatial_features.plot_ratemaps_and_hd import plot_ratemaps_and_hd
 from spatial_features.plot_ratemaps_and_hd_pergoal import plot_ratemaps_and_hd_pergoal
 from spatial_features.combine_autowv_ratemaps import combine_autowv_ratemaps
+from spatial_features.plot_ratemaps_and_hd_speedfilt import plot_ratemaps_and_hd_speedfilt
 from unit_features.plot_spikecount_over_trials import plot_spikecount_over_trials
 from unit_features.test_restrict_spiketrain import test_restrict_spiketrain
-from cell_classification_repo.main_pyramidal_classification import run_pipeline as run_classification_pipeline
+from unit_features.get_spiketimes_allunits import get_spiketimes_alltrials
+from unit_features.export_unit_spiketimes import export_unit_spiketimes
 import numpy as np
 import matplotlib
 from pathlib import Path
@@ -27,23 +29,23 @@ Note: create this environment in conda
 conda create -n movement-env -c conda-forge movement napari pyqt"""
 
 
-tasks_to_run = [3]
+tasks_to_run = [5]
 # 1 : Initial HCT plotting and creating restricted df
 # 2 : Getting platform locations through overlay and the plotting maze outline and limits
 # 3 : Running movement and making overlay video
 # 4 : Making ratemaps and HD plots, spikecount over trials, and combining these
-# 5 : Running cell classification
+# 5 : Speed filtering
 
 frame_rate = 25
-trials_to_include= np.arange(1,27)
+trials_to_include= np.arange(1,14)
 print(trials_to_include)
-derivatives_base = r"E:\Honeycomb_task_1g\derivatives\sub-001_id-2H\ses-01_date-01282026\first_run_2801"
+derivatives_base = r"E:\Honeycomb_task_1g\derivatives\sub-001_id-2H\ses-02_date-12022026\second_run_1602"
 derivatives_base = Path(derivatives_base)
 task = 'hct' # hct or spatiotemp
 goals_to_include = [1] # This is for the HCT. 
 # 0: animal going to g2 during g1
 # 1: animal going to g1
-# 2: animal going to g2
+# 2: animal going to g2p
 
 
 good_overlay = "y"
@@ -51,7 +53,7 @@ unit_type = "all" # all, pyramidal, or good
 run_which_units_hct = "all" # all, pyramidal, good, or test (first 5 units)
 show_plots = False
 save_plots = True
-include_open_field = False
+include_open_field = True
 clear_plot_folder = False
 short_overlay = True
 
@@ -81,10 +83,10 @@ if 2 in tasks_to_run:
 ########### TRACKING AND COMBINING POS DATA ############
 # run_movement gives us the xy coordinates and hd
 if 3 in tasks_to_run:
-    run_movement(derivatives_base,trials_to_include = [1,2], conf_threshold = 0.4, frame_rate = frame_rate, show_plots= show_plots)
+    #run_movement(derivatives_base,trials_to_include = trials_to_include, conf_threshold = 0.4, frame_rate = frame_rate, show_plots= show_plots)
 
     # overlays the hd on the video
-    overlay_video_HD(derivatives_base, [4, 5, 6], short = short_overlay)
+    #overlay_video_HD(derivatives_base, [4, 5, 6], short = short_overlay)
 
     # combines all the positional csvs. Output: XY_HD_alltrials.csv, XY_HD_alltrials_center.csv (gives the center coordinates)
     combine_pos_csvs(derivatives_base, trials_to_include, frame_rate =frame_rate)
@@ -105,7 +107,7 @@ if 3 in tasks_to_run:
 ############ GETTING SPATIAL AND UNIT FEATURES #############
 # Rate map + hd for each unit
 if 4 in tasks_to_run:
-    #plot_ratemaps_and_hd(derivatives_base, unit_type = unit_type, save_plots = save_plots, show_plots = show_plots, clear_plot_folder = clear_plot_folder, frame_rate= frame_rate)
+    plot_ratemaps_and_hd(derivatives_base, unit_type = unit_type, save_plots = save_plots, show_plots = show_plots, clear_plot_folder = clear_plot_folder, frame_rate= frame_rate)
 
     # Spikecount over time for each unit
     plot_spikecount_over_trials(derivatives_base, unit_type = unit_type, trials_to_include = trials_to_include, task = task, last_trial_openfield = include_open_field)
@@ -116,17 +118,25 @@ if 4 in tasks_to_run:
 
     if task == "hct":
 
-        #plot_heatmap_xy(derivatives_base, trials_to_include, goals_to_include, frame_rate)
-        
-        #plot_ratemaps_and_hd_pergoal(derivatives_base, unit_type = unit_type, goals_to_include= goals_to_include, include_open_field = include_open_field, save_plots= save_plots, show_plots= show_plots,clear_plot_folder= clear_plot_folder, frame_rate = frame_rate)
+        plot_heatmap_xy(derivatives_base, trials_to_include, goals_to_include, frame_rate)
+
+        plot_ratemaps_and_hd_pergoal(derivatives_base, unit_type = unit_type, goals_to_include= goals_to_include, include_open_field = include_open_field, save_plots= save_plots, show_plots= show_plots,clear_plot_folder= clear_plot_folder, frame_rate = frame_rate)
         
         combine_autowv_ratemaps(derivatives_base, unit_type = unit_type, rmap_per_goal= True)
 
-        #test_restrict_spiketrain(derivatives_base, unit_type = unit_type, goals_to_include = goals_to_include, show_plots = show_plots)
+        test_restrict_spiketrain(derivatives_base, unit_type = unit_type, goals_to_include = goals_to_include, show_plots = show_plots)
 
 
-########## CLASSIFICATION ################
+########## SPEED FILTERING ################
 if 5 in tasks_to_run:
-    run_classification_pipeline(derivatives_base)
-
-
+    # Get spiketimes for each unit, filtered by speed
+    speed_threshold = 2 #default: 2cm/s
+    export_unit_spiketimes(derivatives_base, goals_to_include=goals_to_include, add_speed_filt = True, speed_threshold = speed_threshold, frame_rate = frame_rate)
+    
+    # exports spiketimes of all units for each trial, filtered by speed
+    #get_spiketimes_alltrials(derivatives_base, speed_filt = True, frame_rate = frame_rate)
+    show_plots = True
+    include_open_field = False
+    # Plot ratemaps for the speed filtered values
+    plot_ratemaps_and_hd_speedfilt(derivatives_base, unit_type = "pyramidal", goals_to_include=goals_to_include, include_open_field=include_open_field,
+                                   save_plots = save_plots, show_plots = show_plots, clear_plot_folder=clear_plot_folder, frame_rate = frame_rate)

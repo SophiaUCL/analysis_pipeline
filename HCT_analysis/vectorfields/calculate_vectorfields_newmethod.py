@@ -6,7 +6,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Literal
 from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
-from HCT_analysis.utilities.trials_utils import get_goal_coordinates, get_unit_ids
+from HCT_analysis.utilities.trials_utils import get_goal_coordinates, get_unit_ids, get_spiketrain_from_dict
 from HCT_analysis.vectorfields.vectorfields_utils import plot_vector_fields_all, calculate_vector_fields
 
 UnitTypes = Literal['pyramidal', 'good', 'all', 'test']
@@ -17,7 +17,7 @@ def main(derivatives_base: Path,  unit_type: UnitTypes, methods: list = [1,2,3],
     run get_directional_occupancy_by_pos.py first to generate the necessary data.
 
     Inputs
-    --------
+    --------sp
     derivatives_base (Path): The base directory for the derivatives.
     unit_type (pyramidal, good, all, or test): Which units to include in the analysis
     methods (list): What methods to load. Currently not in use

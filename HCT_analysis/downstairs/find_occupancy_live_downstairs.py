@@ -71,6 +71,11 @@ if len(goal_platforms) == 1:
 else:
     goals_to_include = [1,2, 3]
 
-make_plot(concatenated_df, goal_platforms, goals_to_include, title = f"Occupancy and starts for {animal_id} on {curr_date}")
+day = curr_date[0:2]
+month = curr_date[2:4]
+year = curr_date[4:9]
+
+date = day + "/" + month + "/" + year
+make_plot(concatenated_df, goal_platforms, goals_to_include, title = f"Occupancy and starts for {animal_id} on {date}")
 
 

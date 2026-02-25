@@ -104,6 +104,23 @@ def get_pos_data(derivatives_base, rel_dir_occ, goals_to_include):
     return pos_data, pos_data_g0, pos_data_g1, pos_data_g2, pos_data_reldir
 
 
+def get_spiketrain_from_dict(derivatives_base: Path, speed_filt: bool = False, goal: int = 3):
+    """ Gets spiketrain dictionary"""
+    pos_folder = derivatives_base / "analysis/cell_characteristics/unit_features/spike_times"
+    
+    if goal == 3: #full trial
+        if speed_filt:
+            spike_dict = np.load(pos_folder / 'spike_times_speedfilt.npy', allow_pickle=True).item()
+        else:
+            spike_dict = np.load(pos_folder / 'spike_times_frames.npy', allow_pickle = True).item()
+    else:
+        if speed_filt:
+            spike_dict = np.load(pos_folder / f'spike_times_frames_speedfilt_g{goal}.npy', allow_pickle=True).item()
+        else:
+            spike_dict = np.load(pos_folder / f'spike_times_frames_g{goal}.npy', allow_pickle = True).item()
+
+    return spike_dict
+
 def get_spike_train(sorting, unit_id, pos_data, rawsession_folder, g, frame_rate=25, sample_rate=30000):
     """ Obtains the spike train and restricts it to the goal"""
     spike_train_unscaled = sorting.get_unit_spike_train(unit_id=unit_id)
@@ -271,7 +288,7 @@ def get_unit_ids(derivatives_base, unit_ids, unit_type):
                                             "all_units_overview", "pyramidal_units_2D.csv")
         print("Getting pyramidal units 2D")
         pyramidal_units_df = pd.read_csv(pyramidal_units_path)
-        pyramidal_units = pyramidal_units_df['unit_ids'].values
+        pyramidal_units = pyramidal_units_df.iloc[:, 0].values
         unit_ids = pyramidal_units
     elif unit_type == "test":
         print("getting first 5 units")

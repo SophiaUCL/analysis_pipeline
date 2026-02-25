@@ -18,7 +18,7 @@ def turn_restricteddf_frames(derivatives_base: Path, frame_rate: int = 25):
     """
     
     # rawsession folder
-    rawsession_folder = Path(str(derivatives_base).replace("derivatives", "raw_data")).parent
+    rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent
     
     # get file
     path = rawsession_folder/"task_metadata"/'restricted_final.csv'
