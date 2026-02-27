@@ -63,11 +63,11 @@ def is_point_in_platform(rat_locx, rat_locy, hcoord, vcoord, hex_side_length):
 def get_goals_coords(goals):
     return [get_platform_center(goals[0]), get_platform_center(goals[1])]
 
-def calculate_occupancy_plats(pos_data):
+def calculate_occupancy_plats(pos_data, frame_rate = 25):
     platforms_occupancy = []
     for i in range(61):
         platforms_i = pos_data[pos_data['platform'] == i + 1]
-        occupancy_i = len(platforms_i)
+        occupancy_i = len(platforms_i)/frame_rate
         platforms_occupancy.append(occupancy_i)
     return platforms_occupancy
 

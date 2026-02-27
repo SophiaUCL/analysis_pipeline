@@ -80,8 +80,4 @@ run_spikewrap(derivatives_base, rawsubject_folder, session_name, concat_runs = c
 run_spikeinterface(derivatives_base, run_analyzer_from_memory=False, run_df_from_memory=False, clear_plot_folder=False)
 
 # === Getting spiketimes for all the cells exported =====
-export_unit_spiketimes(derivatives_base, goals_to_include, add_speed_filt = False, frame_rate = frame_rate, sample_rate = sample_rate)
-
-
-# ==== Getting the spiketimes per trial for each unit exported
-get_spiketimes_alltrials(derivatives_base, speed_filt = False, frame_rate = frame_rate)
+export_unit_spiketimes(derivatives_base, goals_to_include = [], add_speed_filt = False, frame_rate = frame_rate, sample_rate = sample_rate)

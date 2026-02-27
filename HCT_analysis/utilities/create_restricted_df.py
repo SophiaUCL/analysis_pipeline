@@ -25,10 +25,14 @@ def create_restricted_df(derivatives_base: Path, goals_to_include: list, trials_
     --------
     spatial_processing_pipeline.py
     """
-    # Creates trial csv only for thsi day
+    # 1) Creates trial csv only for thsi day
     append_alltrials(derivatives_base)
 
-    # Checks whether restricted df exists
+
+    # 2) Concatenates all the trials
+    concat_trials(derivatives_base)
+    
+    # 3) Checks whether restricted df exists
     restricted_df_exists =  check_restricted_df_exists(derivatives_base)
     if restricted_df_exists:
         print("Restricted_df exists")
@@ -41,5 +45,4 @@ def create_restricted_df(derivatives_base: Path, goals_to_include: list, trials_
         create_intervals_specialbehav(derivatives_base)
     else:
         print("0 in goals to include and restricted_df.csv doesn't exist. Please create manually and rerun")
-        
-    concat_trials(derivatives_base)
+    

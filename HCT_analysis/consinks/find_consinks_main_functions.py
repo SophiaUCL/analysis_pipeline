@@ -1,28 +1,48 @@
 import numpy as np
-from HCT_analysis.calculate_pos_and_dir import get_directions_to_position, get_relative_directions_to_position
-from HCT_analysis.calculate_occupancy import get_direction_bins, bin_directions
-from HCT_analysis.utilities.trials_utils import verify_allnans
 import matplotlib
 matplotlib.use("QtAgg")
 from joblib import Parallel, delayed
+from astropy.stats import circmean
+from pathlib import Path
+import os
+import pandas as pd
+from HCT_analysis.occupancy_and_spikes.calculate_occupancy import get_relative_direction_occupancy_by_position_platformbins
+from HCT_analysis.occupancy_and_spikes.calculate_pos_and_dir import get_directions_to_position, get_relative_directions_to_position
+from HCT_analysis.utilities.trials_utils import verify_allnans, get_direction_bins, bin_directions
 from HCT_analysis.utilities.mrl_func import resultant_vector_length
 from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
-from astropy.stats import circmean
-import os
+
 
 num_candidate_sinks = 127
-""" In this code, the bins are the platforms"""
-import warnings
-
-""" This file contains different functions that we use in find_consinks_main.py to find consinks
+""" 
+This file contains different functions that we use in find_consinks_main.py to find consinks
 Here we implement 3 different methods:
 Method 1: normalise the relative direction distribution by the control distribution based on the number of spikes fired at each platform (original method)
 Method 2: normalise the relative direction distribution for each platform separately, then sum across platforms
 Method 3: normalise the relative direction distribution by the control distribution based on the occupancy for the whole maze (not binned by platform)
 """
 
-def get_dir_allframes(pos_data, sink_positions):
-    """ Gets directions from each frame to each sink"""
+def get_dir_allframes(
+    pos_data: pd.DataFrame, 
+    sink_positions: list) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Compute absolute and relative directions from each frame to each sink.
+
+    Parameters
+    ----------
+    pos_data : pd.DataFrame
+        Columns: x, y, head direction (radians).
+    sink_positions : list
+        List of [x, y] sink coordinates.
+
+    Returns
+    -------
+    sinkdir_allframes : (n_frames, n_sinks) ndarray
+        Absolute direction (radians) to each sink.
+    reldir_allframes : (n_frames, n_sinks) ndarray
+        Relative direction (radians) between head direction and sink direction.
+    """
+
 
     sinkdir_allframes = np.zeros(
         (len(pos_data), num_candidate_sinks)
@@ -32,7 +52,7 @@ def get_dir_allframes(pos_data, sink_positions):
         (len(pos_data), num_candidate_sinks)
     )
 
-
+    # Getting x y poisiton
     x_org = pos_data.iloc[:, 0].to_numpy()
     y_org = pos_data.iloc[:, 1].to_numpy()
     hd_org = pos_data.iloc[:, 2].to_numpy()
@@ -51,7 +71,42 @@ def get_dir_allframes(pos_data, sink_positions):
         reldir_allframes[:, s] = relative_direction
     return sinkdir_allframes, reldir_allframes
 
-def export_sig_sinks(methods,output_folder,goals_to_include=[0, 1, 2]):
+def calculate_reldir_by_pos(
+    output_folder: Path,
+    sink_positions: list | np.ndarray,
+    pos_data_reldir: pd.DataFrame,
+    pos_data_g0: pd.DataFrame = None,
+    pos_data_g1: pd.DataFrame = None,
+    pos_data_g2: pd.DataFrame = None,
+    goals_to_include: list = [0,1,2]
+):
+    """ 
+    Calls the get relative direction occupancy by position function
+    which computes relative-direction occupancy per platform for all candidate sinks
+    Saves it to the output folder
+    """
+    print("Calculating relative direction occupancy by position")
+    file_name = 'reldir_occ_by_pos.npy'
+    reldir_occ_by_pos= get_relative_direction_occupancy_by_position_platformbins(pos_data_reldir, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
+    np.save(os.path.join(output_folder, file_name), reldir_occ_by_pos)
+    
+    if 0 in goals_to_include:
+        reldir_occ_by_pos_g0= get_relative_direction_occupancy_by_position_platformbins(pos_data_g0, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
+        np.save(os.path.join(output_folder, 'reldir_occ_by_pos_g0.npy'), reldir_occ_by_pos_g0)
+    
+    if 1 in goals_to_include:
+        reldir_occ_by_pos_g1 = get_relative_direction_occupancy_by_position_platformbins(pos_data_g1, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
+        np.save(os.path.join(output_folder, 'reldir_occ_by_pos_g1.npy'), reldir_occ_by_pos_g1)
+    
+    if 2 in goals_to_include:
+        reldir_occ_by_pos_g2 = get_relative_direction_occupancy_by_position_platformbins(pos_data_g2, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
+        np.save(os.path.join(output_folder, 'reldir_occ_by_pos_g2.npy'), reldir_occ_by_pos_g2)
+        
+def export_sig_sinks(
+    methods: list,
+    output_folder: Path,
+    goals_to_include: list =[0, 1, 2]
+    ) -> None:
     """
     Export ONLY unit IDs of significant consinks.
     One file per method, containing a dict: {goal: np.array(unit_ids)}
@@ -143,9 +198,8 @@ def rel_dir_ctrl_distribution_all_sinks(reldir_occ_by_pos, platforms_spk):
     """
     For a given unit, produces relative direction occupancy distributions
     for each candidate consink position based on the number of spikes fired
-    at each positional bin.
+    on each platform. 
 
-    NOTE: The input for the spikes will already be restricted to each goal
     """
     direction_bins = get_direction_bins(n_bins=12)
     rel_dir_ctrl_dist = np.zeros((num_candidate_sinks, len(direction_bins) - 1))
@@ -220,6 +274,7 @@ def normalize_rel_dir_dist(rel_dir_dist, rel_dir_ctrl_dist, n_spikes_total):
         where=sum_rel_dir_dist_div_ctrl_ex != 0
     )
     normalised_rel_dir_dist = normalised_rel_dir_dist * n_spikes_total
+
 
     return normalised_rel_dir_dist
 
@@ -416,7 +471,12 @@ def find_consink_method2(spike_train, reldir_occ_by_pos,  direction_bins,pos_dat
 ############### METHOD 3 #################
 # METHOD 3: CONTROL DISTRIBUTION
 def get_reldir_occ_wholemaze(reldir_allframes, direction_bins):
-    """ From reldir_allframes, gets the directional occupancy for the whole maze (so not binned)"""
+    """
+    Compute whole-maze relative direction occupancy per sink.
+
+    Uses all frames (not separated by platform) and bins relative
+    directions to obtain frame-count occupancy histograms.
+    """
     
     reldir_occ_wholemaze = np.zeros((num_candidate_sinks, len(direction_bins) - 1))
     for s in range(num_candidate_sinks):
@@ -599,3 +659,63 @@ def calculate_averagesink(consinks_df, hcoord, vcoord, goals_to_include):
         avg_pos = np.mean(position, axis = 0)
         average_positions[g] = avg_pos
     return average_positions
+
+
+
+############## VECTOR FIELDS ################
+def calculate_vectorfields(spike_train: list, pos_data: pd.DataFrame, hd_distr_allplats: np.ndarray, occ_time_allplats: np.ndarray, direction_bins: list):
+    """ For each platform, calculates the hd firing for this unit and then calculates the MRL and head direction
+    Saves it in an array of length 61"""
+
+    platforms = pos_data["platform"].to_numpy()
+    hd = pos_data["hd"].to_numpy()
+    
+    MRL_vals = []
+    mean_angle_vals = []
+    firing_rate_vals = []
+    
+    platforms_spk = platforms[spike_train]
+    hd_spk = hd[spike_train]
+    
+    valid = (~np.isnan(platforms_spk)) & (~np.isnan(hd_spk))
+    platforms_spk = platforms_spk[valid].astype(np.int32)
+    hd_spk = hd_spk[valid]   
+    
+    for p in range(61):
+        
+        indices = np.where(platforms_spk == p + 1)[0]
+        
+        if len(indices) == 0:
+            MRL_vals.append(np.nan)
+            mean_angle_vals.append(np.nan)
+            firing_rate_vals.append(np.nan)
+        else:
+            hd_p = hd_spk[indices]
+            
+            binned_spikes, _ = bin_directions(hd_p, direction_bins)
+            
+            hd_distr_p = hd_distr_allplats[p]
+            occ_p = occ_time_allplats[p]
+            
+            firing_rate_vals.append(len(indices)/occ_p)
+            
+            hd_firing_p =  np.divide(
+                binned_spikes,
+                hd_distr_p,
+                out=np.zeros_like(binned_spikes, dtype=float),
+                where=hd_distr_p != 0
+            )
+            
+
+            dir_bin_centres = (direction_bins[1:] + direction_bins[:-1]) / 2
+            
+            mrl_p = resultant_vector_length(dir_bin_centres, w=hd_firing_p)
+
+            mean_angle_p = circmean(dir_bin_centres, weights=hd_firing_p)
+            
+            mean_angle_vals.append(mean_angle_p)
+            MRL_vals.append(mrl_p)
+            
+    return MRL_vals, mean_angle_vals, firing_rate_vals
+        
+

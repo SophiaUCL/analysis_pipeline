@@ -219,7 +219,7 @@ def get_coords_127sinks(derivatives_base):
     vcoord_tr= params["vcoord_tr"]
     return hcoord_tr, vcoord_tr
 
-def get_goal_coordinates(derivatives_base, rawsession_folder):
+def get_goal_coordinates(derivatives_base):
     """
     Returns:
         Goal coordinates. If json file with them doesn't exist, it makes it
@@ -295,8 +295,31 @@ def get_unit_ids(derivatives_base, unit_ids, unit_type):
         unit_ids = unit_ids[:5]
     return unit_ids
 
+def get_direction_bins(n_bins=12):
+    direction_bins = np.linspace(-np.pi, np.pi, n_bins+1)
+    return direction_bins
+
+def bin_directions(directions, direction_bins):
+    # get the bin indices for each value in directions
+    bin_indices = np.digitize(directions, direction_bins, right=True) - 1
+    # any bin_indices that are -1 should be 0
+    bin_indices[bin_indices==-1] = 0
+    # any bin_indices that are n_bins should be n_bins-1
+    n_bins = len(direction_bins) - 1
+    bin_indices[bin_indices==n_bins] = n_bins-1
+
+    # get the counts for each bin
+    counts = np.zeros(n_bins)
+    for i in range(n_bins):
+        counts[i] = np.sum(bin_indices==i)
+
+    return counts, bin_indices
+
 if __name__ == "__main__":
     rawsession_folder = r"D:\Spatiotemporal_task\rawdata\sub-003_id_2V\ses-02_date-05092025"
     append_alltrials(rawsession_folder)
     goal_numbers = get_goal_numbers(rawsession_folder)
     print(f"Goal numbers: {goal_numbers}")
+    
+    
+    

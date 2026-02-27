@@ -59,9 +59,12 @@ short_overlay = True
 
 
 ####### INITIAL HCT PLOTTING AND CSV CREATION ##############
+### you can run this whilst neural data is run
+
 if task == "hct" and 1 in tasks_to_run:
-    # Takes the alltrials csv and creates a new csv only with the rows of the trial date
+    # Batches behavioural data. Takes the alltrials csv and creates a new csv only with the rows of the trial date
     create_restricted_df(derivatives_base, goals_to_include, trials_to_include)
+
 
     # Plots occupancy, start platforms, and proportion correct
     make_maze_behaviour_plots(derivatives_base, goals_to_include,  show_plots = show_plots)
@@ -69,6 +72,7 @@ if task == "hct" and 1 in tasks_to_run:
 
 ############ GETTING PLATFORM LOCATIONS AND PLOTTING PARAMS #############
 # Add platform coordinates to the center positional csv
+###  you can run this whilst neural data is run
 if 2 in tasks_to_run:
     good_overlay, img = overlay_maze_image(derivatives_base,  method = "video")
 
@@ -80,6 +84,7 @@ if 2 in tasks_to_run:
 
     if task == "hct":
         overlay_maze_image_consinks(derivatives_base, method = "video")
+        
 ########### TRACKING AND COMBINING POS DATA ############
 # run_movement gives us the xy coordinates and hd
 if 3 in tasks_to_run:
@@ -107,6 +112,11 @@ if 3 in tasks_to_run:
 ############ GETTING SPATIAL AND UNIT FEATURES #############
 # Rate map + hd for each unit
 if 4 in tasks_to_run:
+    
+    # added step here:export_unit_spiketimes() and change all functions that use it
+    export_unit_spiketimes(derivatives_base, goals_to_include=goals_to_include, add_speed_filt=False, frame_rate=frame_rate)
+    get_spiketimes_alltrials(derivatives_base, speed_filt = False, frame_rate = frame_rate)
+    
     plot_ratemaps_and_hd(derivatives_base, unit_type = unit_type, save_plots = save_plots, show_plots = show_plots, clear_plot_folder = clear_plot_folder, frame_rate= frame_rate)
 
     # Spikecount over time for each unit
@@ -138,5 +148,5 @@ if 5 in tasks_to_run:
     show_plots = True
     include_open_field = False
     # Plot ratemaps for the speed filtered values
-    plot_ratemaps_and_hd_speedfilt(derivatives_base, unit_type = "pyramidal", goals_to_include=goals_to_include, include_open_field=include_open_field,
+    plot_ratemaps_and_hd_speedfilt(derivatives_base, unit_type = unit_type, goals_to_include=goals_to_include, include_open_field=include_open_field,
                                    save_plots = save_plots, show_plots = show_plots, clear_plot_folder=clear_plot_folder, frame_rate = frame_rate)

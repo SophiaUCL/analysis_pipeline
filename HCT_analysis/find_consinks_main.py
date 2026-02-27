@@ -6,23 +6,24 @@ import glob
 import pandas as pd
 import spikeinterface.extractors as se
 import matplotlib.pyplot as plt
-from HCT_analysis.calculate_occupancy import get_direction_bins, \
-     get_relative_direction_occupancy_by_position_platformbins
-from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
-from HCT_analysis.utilities.trials_utils import get_spiketrain_from_dict, ensure_sig_columns, get_goal_numbers, get_coords_127sinks, get_unit_ids, get_pos_data, get_spike_train, get_sink_positions_platforms, translate_positions
-import matplotlib
-from HCT_analysis.turn_restricteddf_frames import turn_restricteddf_frames
-from HCT_analysis.plotting.plot_sinks import  plot_all_consinks_127sinks
-from HCT_analysis.find_consinks_main_functions import export_sig_sinks, get_reldir_bin_idx, calculate_averagesink, find_consink, get_reldir_occ_wholemaze, recalculate_consink_to_all_candidates_from_translation, find_consink_method2, find_consink_method3, get_dir_allframes
-from maze_and_platforms.overlay_maze_image_consinks import overlay_maze_image_consinks
-num_candidate_sinks = 127
 from astropy.stats import circmean
 from matplotlib.patches import RegularPolygon
 from matplotlib.colors import Normalize
 import matplotlib.cm as cm
+import matplotlib
 matplotlib.use("QtAgg")
 from tqdm import tqdm
 from typing import Literal
+
+
+
+from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
+from HCT_analysis.utilities.trials_utils import get_goal_coordinates, get_direction_bins, get_coords, get_spiketrain_from_dict, ensure_sig_columns, get_goal_numbers, get_coords_127sinks, get_unit_ids, get_pos_data, get_spike_train, get_sink_positions_platforms, translate_positions
+from HCT_analysis.utilities.turn_restricteddf_frames import turn_restricteddf_frames
+from HCT_analysis.consinks.plot_sinks import  plot_all_consinks_127sinks, plot_fantail_mean_angles, plot_vector_fields_all
+from HCT_analysis.consinks.find_consinks_main_functions import calculate_vectorfields, calculate_reldir_by_pos, export_sig_sinks, get_reldir_bin_idx, calculate_averagesink, find_consink, get_reldir_occ_wholemaze, recalculate_consink_to_all_candidates_from_translation, find_consink_method2, find_consink_method3, get_dir_allframes
+from HCT_analysis.utilities.platforms_utils import calculate_occupancy_plats
+num_candidate_sinks = 127
 
 
 """ In this code, the bins are the platforms (127 in total)
@@ -35,21 +36,58 @@ NOTE: Potential issues to still look at: if ctrl distribution has low values in 
 This can be fixed by setting a threshold for min occupancy in ctrl distribution
 Threshold hasn't been decided yet
 """
+UnitTypes = Literal['pyramidal', 'good', 'all', 'test']
+RelDirOccTypes = Literal['all trials', 'intervals']
 
-def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
-         unit_type: Literal['pyramidal', 'good', 'all', 'test'], methods = [1,2,3],  code_to_run=[-1, 0, 1,2,3,4], 
-         goals_to_include = [0,1,2], speed_filt = False, 
-         show_plots = True, frame_rate=25, sample_rate=30000):
+def main(derivatives_base: Path, 
+         rel_dir_occ:   RelDirOccTypes,
+         unit_type:     UnitTypes, 
+         methods =      [1,2,3],  
+         code_to_run=   [-1, 0, 1,2,3,4], 
+         goals_to_include = [0,1,2], 
+         speed_filt =   False, 
+         show_plots =   True, 
+         frame_rate =    25
+) -> None:
     """
-    Code to find consinks, based on Jake's code
+    Main code to find consinks. In this code, the bins are the platforms + 2 rounds around them (127 in total)
+    
+    Inputs
+    -----
+    derivatives_base (Path): Path to derivatives folder
+    rel-dir_occ ("all trials" or "intervals"): which type of data to use for the rel dir occ
+    unit_type (UnitTypes): Types of units that will me used
+    methods (list): methods to use. See below for list
+    code_to_run (list): which code blocks to run. see explanantion below
+    goals_to_include (list): which goals to include in analysis. 0: rat going to g2 durin g1
+    speed_filt (bool: False): whether to use speedfiltered data
+    show_plots (bool: True): whether to show the plots
+    frame_rate (int: 25): frame rate of camera
+
+    METHODS
+    We can use three methods for the consink calculation:
+    Method 1: normalise the relative direction distribution by the control distribution based on the number of spikes fired at each platform (original method)
+    Method 2: normalise the relative direction distribution for each platform separately, then sum across platforms
+    Method 3: normalise the relative direction distribution by the control distribution based on the occupancy for the whole maze (not binned by platform)
 
 
+    CODE_TO_RUN:
+    -1: calculate rel dir occ (otherwise just loaded)
+    0: calculate consinks
+    1: get signficance of consinks
+    2: calculate mean consink
+    3: make plot
+    4: make fantail plot
+    
+    
+    NOTE: Potential issues to still look at: if ctrl distribution has low values in certain bin, it will inflate the relative direction occupancy for that bin. 
+    This can be fixed by setting a threshold for min occupancy in ctrl distribution
+    Threshold hasn't been decided yet
     """
     print(f"Calculating consinks using methods {methods}")
     # Path to rawsession folder
     rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent
 
-   
     # Loading spike data
     kilosort_output_path = os.path.join(derivatives_base, "ephys", "concat_run", "sorting", "sorter_output")
     sorting = se.read_kilosort(
@@ -62,56 +100,44 @@ def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
     pos_data, pos_data_g0, pos_data_g1, pos_data_g2, pos_data_reldir = get_pos_data(derivatives_base, rel_dir_occ, goals_to_include)
 
     # restricted df frames
-    path = os.path.join(rawsession_folder, 'task_metadata', 'restricted_df_frames.csv')
-    if not os.path.exists(path):
+    path = rawsession_folder/'task_metadata'/'restricted_df_frames.csv'
+    if not path.exists:
         turn_restricteddf_frames(derivatives_base, frame_rate=frame_rate)
     intervals_frames = pd.read_csv(path)
 
-    if not os.path.exists(os.path.join(derivatives_base, 'analysis', 'maze_overlay', 'maze_overlay_params_consinks.json')):
-        overlay_maze_image_consinks(derivatives_base, method="video")
-        
     # output folder
-    output_folder = os.path.join(derivatives_base, 'analysis', 'cell_characteristics', 'spatial_features',
-                                 'consinks')
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    output_folder = derivatives_base /'analysis'/'cell_characteristics'/'spatial_features'/'consinks'
+    output_folder.mkdir(exist_ok = True)
+    
+    output_folder_vfields = derivatives_base /'analysis'/'cell_characteristics'/'spatial_features'/'vector_fields'
+    output_folder_vfields.mkdir(exist_ok = True)
 
     # Direction bins (from -pi to pi)
     direction_bins = get_direction_bins(n_bins=12)
 
-    # gets translated positions
+    # Getting needed variables
     platforms_trans = translate_positions()
-    # Loading or creating data
-    sink_positions = get_sink_positions_platforms(derivatives_base)
+    sink_positions = get_sink_positions_platforms(derivatives_base) # sink coordinates for platforms
     goal_numbers= get_goal_numbers(derivatives_base)
     _, reldir_allframes = get_dir_allframes(pos_data, sink_positions)
     reldir_occ_wholemaze = get_reldir_occ_wholemaze(reldir_allframes, direction_bins)
     reldir_bin_idx = get_reldir_bin_idx(reldir_allframes, direction_bins)
-    file_name = 'reldir_occ_by_pos.npy'
     min_num_spikes = 30
+    file_name = 'reldir_occ_by_pos.npy'
+    
+    
     if -1 in code_to_run:
         print("Calculating relative direction occupancy by position")
-        reldir_occ_by_pos= get_relative_direction_occupancy_by_position_platformbins(pos_data_reldir, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
-        np.save(os.path.join(output_folder, file_name), reldir_occ_by_pos)
-        if 0 in goals_to_include:
-            reldir_occ_by_pos_g0= get_relative_direction_occupancy_by_position_platformbins(pos_data_g0, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
-            np.save(os.path.join(output_folder, 'reldir_occ_by_pos_g0.npy'), reldir_occ_by_pos_g0)
-        if 1 in goals_to_include:
-            reldir_occ_by_pos_g1 = get_relative_direction_occupancy_by_position_platformbins(pos_data_g1, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
-            np.save(os.path.join(output_folder, 'reldir_occ_by_pos_g1.npy'), reldir_occ_by_pos_g1)
-        if 2 in goals_to_include:
-            reldir_occ_by_pos_g2 = get_relative_direction_occupancy_by_position_platformbins(pos_data_g2, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
-            np.save(os.path.join(output_folder, 'reldir_occ_by_pos_g2.npy'), reldir_occ_by_pos_g2)
+        calculate_reldir_by_pos(output_folder, sink_positions, pos_data_reldir,pos_data_g0,pos_data_g1,pos_data_g2,goals_to_include)
 
-    else:
-        print("Loading reldir occ, not calculating")
-        if 0 in goals_to_include:
-            reldir_occ_by_pos_g0= np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g0.npy'))
-        reldir_occ_by_pos = np.load(os.path.join(output_folder, file_name))
-        if 1 in goals_to_include:
-            reldir_occ_by_pos_g1 = np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g1.npy'))
-        if 2 in goals_to_include:
-            reldir_occ_by_pos_g2 = np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g2.npy'))
+   
+    reldir_occ_by_pos = np.load(os.path.join(output_folder, file_name))
+    if 0 in goals_to_include:
+        reldir_occ_by_pos_g0= np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g0.npy'))
+    if 1 in goals_to_include:
+        reldir_occ_by_pos_g1 = np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g1.npy'))
+    if 2 in goals_to_include:
+        reldir_occ_by_pos_g2 = np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g2.npy'))
 
     ################# CALCULATE CONSINKS ###########################################
     
@@ -270,155 +296,75 @@ def main(derivatives_base, rel_dir_occ: Literal['all trials', 'intervals'],
                             plot_name=title, show_plots = show_plots)
             if len(methods)>1 and method != methods[-1]:
                 plt.close('all')
+    
 
     if 4 in code_to_run:
         # Plot fantail
         plot_fantail_mean_angles(derivatives_base, methods, output_folder, goals_to_include = goals_to_include, show_plots = show_plots)
         
-    if 5 in code_to_run:
-        pass
-        # still to add
+
     export_sig_sinks(methods,output_folder,goals_to_include=goals_to_include)
-def plot_fantail_mean_angles(derivatives_base, methods, output_folder, goals_to_include, show_plots = True,
-                             n_bins=12):
-    """
-    Plot fantail (polar histograms) of mean angles for significant units,
-    separately for each goal.
-    """
-    subject_id = derivatives_base.split(os.sep)[3]
-    session_id = derivatives_base.split(os.sep)[4]
-    title = f"Fantail {subject_id}, {session_id}, significant consinks"
-
-
-    n_goals = len(goals_to_include)
-    fig, axes = plt.subplots(
-        len(methods), n_goals,
-        figsize=(6 * n_goals, 4*len(methods)),
-        subplot_kw={'projection': 'polar'}
-    )
-    axes = np.atleast_2d(axes)
-    plt.suptitle(title)
-
-
-    for i_m, method in enumerate(methods):
-        consinks_df = load_pickle(f'consinks_df_m{method}', output_folder)
-
-        for i_g, g in enumerate(goals_to_include):
-            ax = axes[i_g, i_m]
-
-            sig_mask = consinks_df[f'sig_g{g}'] == 'sig'
-            angles = consinks_df.loc[sig_mask, f'mean_angle_g{g}'].values
-            angles = np.asarray(angles, dtype=float)
-            if len(angles) == 0:
-                ax.set_title(f'Method {method}, Goal {g}\nNo significant units')
-                continue
+    
+    if 5 in code_to_run:
+        # vector fields
+        
+        vector_fields = {}
+        
+        occ_plats = {}
+        hd_distr_plats = {}
+        for g in goals_to_include:
+            if g == 0:
+                pos_data_cur = pos_data_g0
+            elif g == 1:
+                pos_data_cur = pos_data_g1
+            elif g == 2:
+                pos_data_cur = pos_data_g2
+            else:
+                pos_data_cur = pos_data_reldir
+            hd_plats = []  
+            hd = pos_data_cur["hd"].to_numpy()
             
-            angles = angles[np.isfinite(angles)]
+            for p in range(61):
+                indices = np.where(pos_data_cur["platform"] == p + 1)[0]
+                hd_p = hd[indices]
+                hd_p = hd_p[~np.isnan(hd_p)]
+                hd_hist, _ = np.histogram(hd_p, bins=direction_bins)
+                hd_plats.append(hd_hist)
 
-            if len(angles) == 0:
-                ax.set_title(f'Method {method}, Goal {g}\nNo significant units')
-                continue
-
-            ax.hist(
-                angles,
-                bins=n_bins,
-                range=(-np.pi, np.pi),
-                density=True,
-                alpha=0.6
-            )
-
-            mean_ang = circmean(angles)
-            ax.plot(
-                [mean_ang, mean_ang],
-                [0, ax.get_rmax()],
-                color='k',
-                linewidth=2
-            )
-
-            ax.set_theta_zero_location('N')
-            ax.set_theta_direction(-1)
-            ax.set_title(
-                f'Method {method}, Goal {g}\nN = {len(angles)}',
-                fontsize=12
-            )
-
-    plt.tight_layout()
-    save_path = os.path.join(
-        output_folder, 'fantail_mean_angles_all_methods.png'
-    )
-    plt.savefig(save_path, dpi=300)
-    if show_plots:
-        plt.show()
-
-    print(f"Saved fantail plot to {save_path}")
-
-def plot_mrl_heatmaps_first_cells(
-    derivatives_base,
-    methods,
-    output_folder,
-    goal=1,
-    n_cells=5,
-    include_g0=False,
-    cmap='viridis'
-):
-    """
-    Plot MRL heatmaps over platform positions for the first n_cells.
-    Rows = cells, Columns = methods
-    """
-
-    hcoord, vcoord = get_coords_127sinks(derivatives_base)
-    platforms_trans = translate_positions()
-
-    for j, method in enumerate(methods):
-        consinks_df = load_pickle(f'consinks_df_m{method}', output_folder)
-
-        for i, unit_id in enumerate(consinks_df.index[:n_cells]):
-            ax = axes[i, j]
-
-            mrl_all = consinks_df.loc[unit_id, f'mrl_all_g{goal}']
-            if mrl_all is None:
-                continue
-
-            if not isinstance(mrl_all, np.ndarray):
-                ax.set_title(f'Unit {unit_id}\nNo data')
-                continue
-
-            norm = Normalize(vmin=0, vmax=np.nanmax(mrl_all))
-            cmap_fn = cm.get_cmap(cmap)
-
+            occ_g = calculate_occupancy_plats(pos_data_cur)
+            occ_plats[g] = occ_g
+            hd_distr_plats[g] = hd_plats
             
-            # Add some coloured hexagons and adjust the orientation to match the rotated grid
-            for s, (x, y) in enumerate(zip(hcoord, vcoord)):
-                colour = cmap_fn(norm(mrl_all[s]))
-                text = " "
-                edgecolor = 'white'
-                hex = RegularPolygon((x, y), numVertices=6, radius=83,
-                                    orientation=np.radians(28),  # Rotate hexagons to align with grid
-                                    facecolor=colour, alpha=0.2, edgecolor=edgecolor)
-                ax.text(x, y, text, ha='center', va='center', size=15)  # Start numbering from 1
-                ax.add_patch(hex)
+            
+        for unit_id in tqdm(unit_ids):
+            vector_fields[unit_id] = {}
+            for g in goals_to_include:
+                hd_distr_g = hd_distr_plats[g]
+                occ_time_g = occ_plats[g]
 
-            ax.set_aspect('equal')
-            ax.invert_yaxis()
-            ax.axis('off')
+                spike_dict = get_spiketrain_from_dict(derivatives_base, speed_filt = speed_filt, goal = g)
+                spike_train = spike_dict[unit_id]
 
-            ax.set_title(
-                f'Unit {unit_id}\nMethod {method}',
-                fontsize=10)
-    plt.suptitle(
-        f'MRL heatmaps (goal {goal}) – first {n_cells} units',
-        fontsize=18
-    )
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
-
-    save_path = os.path.join(
-        output_folder,
-        f'mrl_heatmaps_first_{n_cells}_cells_goal_{goal}.png'
-    )
-    plt.savefig(save_path, dpi=300)
-    plt.show()
-
-    print(f"Saved MRL heatmaps to {save_path}")
+                MRL_vals, mean_angle_vals, firing_rate_vals = calculate_vectorfields(spike_train, pos_data, hd_distr_g, occ_time_g, direction_bins)
+                
+                vector_fields[unit_id][g] = {
+                    "MRL_vals": MRL_vals,
+                    "mean_angle_vals": mean_angle_vals,
+                    "firing_rate_vals": firing_rate_vals
+                }
+        print(f"Saving vectorfields to {output_folder_vfields}")
+        np.save(output_folder_vfields / "vectorfields.npy", vector_fields)
+        
+        
+    if 6 in code_to_run:
+        # PLot vectorfields
+        print("Plotting vectorfields")
+        vector_fields = np.load(output_folder_vfields / "vectorfields.npy", allow_pickle = True).item()
+        plot_vector_fields_all(vector_fields,  derivatives_base, unit_ids, goal_numbers, plot_dir = output_folder_vfields, goals_to_include = goals_to_include, methods = methods, consink_folder= output_folder)
+        
+        
+                
+            
 if __name__ == "__main__":
     derivatives_base = r"S:\Honeycomb_maze_task\derivatives\sub-002_id-1R\ses-02_date-11092025\all_trials"
     goals_to_include = [1,2,3]

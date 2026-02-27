@@ -1,10 +1,8 @@
 import numpy as np
 from pathlib import Path
 from HCT_analysis.find_consinks_main import main as find_consinks_main
-from HCT_analysis.get_directional_occupancy_by_pos import main as directional_occupancy_main
 #from HCT_analysis.find_popsink_main import calculate_popsink
 from spatial_features.combine_autowv_ratemaps import combine_autowv_ratemaps_vectorfields
-from HCT_analysis.vectorfields.calculate_vectorfields_newmethod import main as calculate_vectorfields
 
 """ This file contains the code to calculate the popsink and consink. 
 Run this pipeline after the spatial processing pipeline
@@ -18,13 +16,10 @@ derivatives_base = Path(derivatives_base)
 goals_to_include = [1] 
 speed_filt = True
 
-directional_occupancy_main(derivatives_base, goals_to_include = goals_to_include, speed_filt = speed_filt)
+code_to_run_consinks =  [6]
 
 # Find consinks
-find_consinks_main(derivatives_base, rel_dir_occ='intervals',unit_type= "pyramidal",  goals_to_include = goals_to_include, show_plots = True, code_to_run=[-1, 0, 1, 2, 3, 4], speed_filt = speed_filt)
-
-
-calculate_vectorfields(derivatives_base, unit_type = "pyramidal", goals_to_include = goals_to_include)
+find_consinks_main(derivatives_base, rel_dir_occ='intervals',unit_type= "pyramidal",  goals_to_include = goals_to_include, show_plots = True, code_to_run=code_to_run_consinks, speed_filt = speed_filt)
 
 breakpoint()
 # Find popsink
