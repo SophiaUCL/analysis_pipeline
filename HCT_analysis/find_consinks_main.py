@@ -1,15 +1,9 @@
 from pathlib import Path
-import sys
 import numpy as np
 import os
-import glob
 import pandas as pd
 import spikeinterface.extractors as se
 import matplotlib.pyplot as plt
-from astropy.stats import circmean
-from matplotlib.patches import RegularPolygon
-from matplotlib.colors import Normalize
-import matplotlib.cm as cm
 import matplotlib
 matplotlib.use("QtAgg")
 from tqdm import tqdm
@@ -18,12 +12,11 @@ from typing import Literal
 
 
 from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
-from HCT_analysis.utilities.trials_utils import get_goal_coordinates, get_direction_bins, get_coords, get_spiketrain_from_dict, ensure_sig_columns, get_goal_numbers, get_coords_127sinks, get_unit_ids, get_pos_data, get_spike_train, get_sink_positions_platforms, translate_positions
+from HCT_analysis.utilities.trials_utils import get_direction_bins, get_spiketrain_from_dict, ensure_sig_columns, get_goal_numbers, get_coords_127sinks, get_unit_ids, get_pos_data, get_sink_positions_platforms, translate_positions
 from HCT_analysis.utilities.turn_restricteddf_frames import turn_restricteddf_frames
 from HCT_analysis.consinks.plot_sinks import  plot_all_consinks_127sinks, plot_fantail_mean_angles, plot_vector_fields_all
 from HCT_analysis.consinks.find_consinks_main_functions import calculate_vectorfields, calculate_reldir_by_pos, export_sig_sinks, get_reldir_bin_idx, calculate_averagesink, find_consink, get_reldir_occ_wholemaze, recalculate_consink_to_all_candidates_from_translation, find_consink_method2, find_consink_method3, get_dir_allframes
 from HCT_analysis.utilities.platforms_utils import calculate_occupancy_plats
-num_candidate_sinks = 127
 
 
 """ In this code, the bins are the platforms (127 in total)
@@ -38,6 +31,7 @@ Threshold hasn't been decided yet
 """
 UnitTypes = Literal['pyramidal', 'good', 'all', 'test']
 RelDirOccTypes = Literal['all trials', 'intervals']
+num_candidate_sinks = 127
 
 def main(derivatives_base: Path, 
          rel_dir_occ:   RelDirOccTypes,
@@ -55,7 +49,7 @@ def main(derivatives_base: Path,
     Inputs
     -----
     derivatives_base (Path): Path to derivatives folder
-    rel-dir_occ ("all trials" or "intervals"): which type of data to use for the rel dir occ
+    rel_dir_occ ("all trials" or "intervals"): which type of data to use for the rel dir occ
     unit_type (UnitTypes): Types of units that will me used
     methods (list): methods to use. See below for list
     code_to_run (list): which code blocks to run. see explanantion below
@@ -120,8 +114,8 @@ def main(derivatives_base: Path,
     sink_positions = get_sink_positions_platforms(derivatives_base) # sink coordinates for platforms
     goal_numbers= get_goal_numbers(derivatives_base)
     _, reldir_allframes = get_dir_allframes(pos_data, sink_positions)
-    reldir_occ_wholemaze = get_reldir_occ_wholemaze(reldir_allframes, direction_bins)
-    reldir_bin_idx = get_reldir_bin_idx(reldir_allframes, direction_bins)
+    reldir_occ_wholemaze = get_reldir_occ_wholemaze(reldir_allframes, direction_bins) # For method 3
+    reldir_bin_idx = get_reldir_bin_idx(reldir_allframes, direction_bins) # For method 2
     min_num_spikes = 30
     file_name = 'reldir_occ_by_pos.npy'
     

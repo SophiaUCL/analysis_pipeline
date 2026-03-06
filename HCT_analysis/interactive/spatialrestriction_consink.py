@@ -8,15 +8,15 @@ import matplotlib.pyplot as plt
 from utilities.spatial_functions import get_ratemaps, get_ratemaps_restrictedx
 import json
 
-from plotting.plot_sinks import plot_consinks_singlesubplot
-from utilities.trials_utils import get_goal_coordinates, get_goal_numbers, get_coords_127sinks, get_unit_ids, get_pos_data, verify_allnans, get_spike_train, get_sink_positions_platforms, translate_positions
-import warnings
-from astropy.stats import circmean
+from consinks.plot_sinks import plot_consinks_singlesubplot
+from utilities.trials_utils import get_goal_numbers, get_coords_127sinks, get_pos_data,get_sink_positions_platforms, translate_positions
 from utilities.restrict_spiketrain_specialbehav import restrict_spiketrain_specialbehav
-from calculate_occupancy import get_relative_direction_occupancy_by_position, get_axes_limits, get_direction_bins, \
-    bin_directions, get_relative_direction_occupancy_by_position_platformbins
+from consinks.RelDirOcc_functions import get_relative_direction_occupancy_by_position_platformbins
 from tqdm import tqdm
-from find_consinks_main_functions import get_reldir_bin_idx, calculate_averagesink, find_consink, get_reldir_occ_wholemaze, recalculate_consink_to_all_candidates_from_translation, find_consink_method2, find_consink_method3, get_dir_allframes
+from consinks.find_consinks_main_functions import get_reldir_bin_idx, find_consink, get_reldir_occ_wholemaze, recalculate_consink_to_all_candidates_from_translation, find_consink_method2, find_consink_method3, get_dir_allframes
+
+""" Allows you to interactively select an area on a rmap and then plot the sinks for that area"""
+
 def mask_posdata(pos_data, mask):
     """
     Masks positional data
@@ -229,7 +229,7 @@ def plot_spikemap(i, spike_train, x, y, hd, xmin, xmax, ymin, ymax, outline_x, o
     axs[i, 1].set_title(title)
 
 
-def plot_consinks_interactive(derivatives_base, unit_id, methods = [1,2,3], rel_dir_occ = "intervals",  include_g0 = True,  frame_rate=25, sample_rate=30000):
+def plot_consinks_interactive(derivatives_base, unit_id, methods = [1,2,3], rel_dir_occ = "intervals",  goals: list = [0,1,2],  frame_rate=25, sample_rate=30000):
     """
     Makes a plot for each unit with its ratemap (left), occupancy (middle) and directional firing rate (right).
     User adjustable
@@ -244,6 +244,7 @@ def plot_consinks_interactive(derivatives_base, unit_id, methods = [1,2,3], rel_
     # restricted df frames
     path = os.path.join(rawsession_folder, 'task_metadata', 'restricted_df_frames.csv')
     intervals_frames = pd.read_csv(path)
+    
     # Loading data
     xmin, xmax, ymin, ymax, outline_x, outline_y,input, mask, sorting, goals = load_data(derivatives_base, include_g0)
     goals = [1,2]

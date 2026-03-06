@@ -6,10 +6,8 @@ from astropy.stats import circmean
 from pathlib import Path
 import os
 import pandas as pd
-from HCT_analysis.occupancy_and_spikes.calculate_occupancy import get_relative_direction_occupancy_by_position_platformbins
-from HCT_analysis.occupancy_and_spikes.calculate_pos_and_dir import get_directions_to_position, get_relative_directions_to_position
+from HCT_analysis.consinks.RelDirOcc_functions import get_relative_direction_occupancy_by_position_platformbins, get_directions_to_position, get_relative_directions_to_position
 from HCT_analysis.utilities.trials_utils import verify_allnans, get_direction_bins, bin_directions
-from HCT_analysis.utilities.mrl_func import resultant_vector_length
 from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
 
 
@@ -328,6 +326,13 @@ def find_consink(spike_train, reldir_occ_by_pos,  direction_bins,pos_data,
 # METHOD 2: SPIKE DISTRIBUTION
 
 def rel_dir_distribution_m2_fast(spike_train, platforms_spk, reldir_bin_idx, n_bins):
+    """
+    METHOD 2 (normalize each platform)
+    Create array to store the relative direction histograms. There will be one histogram
+    for each candidate consink position. The histograms will be stored in a 3D array, with
+    dimensions (n_sinks, n_platforms, n_direction_bins).
+
+    """
     rel_dir_dist = np.zeros((num_candidate_sinks, 61, n_bins))
     bins = reldir_bin_idx[spike_train]  # (n_spikes, n_sinks)
     
@@ -719,3 +724,67 @@ def calculate_vectorfields(spike_train: list, pos_data: pd.DataFrame, hd_distr_a
     return MRL_vals, mean_angle_vals, firing_rate_vals
         
 
+
+
+#### OTHER FUNCTIONS ######
+def resultant_vector_length(alpha, w=None, d=None, axis=None,
+                            axial_correction=1, ci=None, bootstrap_iter=None):
+    """
+    Copied from Pycircstat documentation
+    Computes mean resultant vector length for circular data.
+
+    This statistic is sometimes also called vector strength.
+
+    :param alpha: sample of angles in radians
+    :param w: number of incidences in case of binned angle data
+    :param ci: ci-confidence limits are computed via bootstrapping,
+               default None.
+    :param d: spacing of bin centers for binned data, if supplied
+              correction factor is used to correct for bias in
+              estimation of r, in radians (!)
+    :param axis: compute along this dimension, default is None
+                 (across all dimensions)
+    :param axial_correction: axial correction (2,3,4,...), default is 1
+    :param bootstrap_iter: number of bootstrap iterations
+                          (number of samples if None)
+    :return: mean resultant length
+
+    References: [Fisher1995]_, [Jammalamadaka2001]_, [Zar2009]_
+    """
+    if axis is None:
+        axis = 0
+        alpha = alpha.ravel()
+        if w is not None:
+            w = w.ravel()
+
+    cmean = _complex_mean(alpha, w=w, axis=axis,
+                          axial_correction=axial_correction)
+
+    # obtain length
+    r = np.abs(cmean)
+
+    # for data with known spacing, apply correction factor to correct for bias
+    # in the estimation of r (see Zar, p. 601, equ. 26.16)
+    if d is not None:
+        r *= d / 2 / np.sin(d / 2)
+    return r
+
+
+def _complex_mean(alpha, w=None, axis=None, axial_correction=1):
+    # Copied from picircstat documentation
+    if w is None:
+        w = np.ones_like(alpha)
+    alpha = np.asarray(alpha)
+
+    assert w.shape == alpha.shape, "Dimensions of data " + str(alpha.shape) \
+                                   + " and w " + \
+        str(w.shape) + " do not match!"
+
+    num = (w * np.exp(1j * alpha * axial_correction)).sum(axis=axis)
+    den = np.sum(w, axis=axis)
+
+    # Avoid division by zero
+    with np.errstate(invalid='ignore', divide='ignore'):
+        result = np.divide(num, den, out=np.zeros_like(num, dtype=complex), where=den!=0)
+
+    return result

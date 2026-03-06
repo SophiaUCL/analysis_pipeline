@@ -3,7 +3,7 @@ import os
 
 import sys
 
-# if on windows system
+""" Jake's code to save and load data"""
 
 def load_pickle(filename, dir):
     """

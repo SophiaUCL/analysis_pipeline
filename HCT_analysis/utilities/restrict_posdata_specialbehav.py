@@ -17,8 +17,16 @@ def restrict_posdata_specialbehav(derivatives_base: Path, goals_to_include: list
     show_plots (bool: False): Whether to show the plots
     frame_rate (int: 25)
 
-    Returns:
-        DataFrame: restricted position data
+    Saves:
+    -----
+    os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', f'XY_HD_goal{goal}_trials.csv')
+        pos data restricted to each goal
+        
+    os.path.join(derivatives_base, 'analysis', 'spatial_behav_data', 'XY_and_HD', 'XY_HD_allintervals.csv')
+        concatenated version of all the gaol restricted df
+    
+    output_folder = os.path.join(derivatives_base, 'analysis', 'spatial_behav_data',"occupancy_heatmaps", "session_overview.png")
+        heat map for the differnet goals and the whole session
     """
     rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent
 

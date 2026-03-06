@@ -7,6 +7,10 @@ import json
 from pathlib import Path
 from HCT_analysis.utilities.restrict_spiketrain_specialbehav import restrict_spiketrain_specialbehav
 
+
+""" Different utility functions used for the trials"""
+
+
 def ensure_sig_columns(consinks_df: pd.DataFrame, goals: list):
     for g in goals:
         for col in [f'ci_95_g{g}', f'ci_999_g{g}', f'sig_g{g}']:

@@ -1,20 +1,20 @@
 import numpy as np
 import os
 import pandas as pd
+from pathlib import Path
 
-
-def restrict_spiketrain_specialbehav(spike_train, rawsession_folder, goal: int):
+def restrict_spiketrain_specialbehav(spike_train: list, rawsession_folder: Path | str, goal: int):
     """
     Restricts the spike train to the intervals of the goal.
-    Note! Assumtes the spike train is IN SECONDS
+    NOTE Assumtes the spike train is IN SECONDS
 
     Args:
         spike_train (array): spike times of cell in seconds
         rawsession_folder (str): path to the raw session folder
-        goal (int, optional): goal number (0,1 or 2) 0 meaning that it is rat going to g2 during g1
+        goal (int): goal number (0,1 or 2) 0 meaning that it is rat going to g2 during g1
 
     Returns:
-        spike times in seconds but only within the intervals
+        spike times in seconds but only within the intervals for that goal
     """
     if goal not in (0, 1,2):
         raise ValueError("Goal must be 0, 1 or 2") 
@@ -34,8 +34,6 @@ def restrict_spiketrain_specialbehav(spike_train, rawsession_folder, goal: int):
     mask = np.zeros_like(spike_train, dtype=bool)
     for start, end in intervals:
         mask |= (spike_train > start) & (spike_train < end)
-            
-        
         
 
     return spike_train[mask]

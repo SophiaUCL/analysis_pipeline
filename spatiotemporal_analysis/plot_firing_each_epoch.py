@@ -14,7 +14,7 @@ UnitTypes = Literal['pyramidal', 'good', 'all']
 
 
 def plot_firing_each_epoch(derivatives_base: Path, trials_to_include: list, unit_type: UnitTypes, frame_rate: int = 25, sample_rate: int = 30000):
-    """For each unit, creates an n by 3 plot showing the firing rate for each trial 
+    """For each unit, creates an n by 3 plot showing the firing over time for each trial 
     with each epoch imdicated. 
 
     Args:

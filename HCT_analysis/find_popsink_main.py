@@ -1,29 +1,28 @@
 import matplotlib
 import numpy as np
 import pandas as pd
-from matplotlib.path import Path
 import os
-from HCT_analysis.calculate_pos_and_dir import get_directions_to_position, get_relative_directions_to_position
-from HCT_analysis.calculate_occupancy import get_relative_direction_occupancy_by_position, get_axes_limits, get_direction_bins, \
-    bin_directions, get_relative_direction_occupancy_by_position_platformbins
+import matplotlib.pyplot as plt
+from matplotlib.patches import RegularPolygon
+from tqdm import tqdm
+matplotlib.use("TkAgg")
+import pickle
+import datetime
 import spikeinterface.extractors as se
-from HCT_analysis.find_consinks_main_functions import mean_resultant_length_nrdd
+
+from astropy.stats import circmean
+from HCT_analysis.consinks.RelDirOcc_functions import get_directions_to_position, get_relative_directions_to_position, get_relative_direction_occupancy_by_position_platformbins
+from HCT_analysis.consinks.find_consinks_main_functions import mean_resultant_length_nrdd
 from HCT_analysis.utilities.platforms_utils import get_platform_center, calculate_occupancy_plats, get_hd_distr_allplats, \
     get_firing_rate_platforms, get_norm_hd_distr
 from HCT_analysis.utilities.restrict_spiketrain_specialbehav import restrict_spiketrain_specialbehav
 from HCT_analysis.find_consinks_main import find_consink_method2, find_consink, get_reldir_bin_idx
-from HCT_analysis.utilities.mrl_func import resultant_vector_length
-from HCT_analysis.utilities.utils import get_unit_ids
-from astropy.stats import circmean
+from HCT_analysis.utilities.trials_utils import get_direction_bins, bin_directions, get_unit_ids
 from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
+from HCT_analysis.utilities.trials_utils import  get_goal_numbers, get_pos_data, get_spike_train, get_sink_positions_platforms, translate_positions
+from HCT_analysis.consinks.find_consinks_main_functions import resultant_vector_length, get_reldir_bin_idx, find_consink, get_reldir_occ_wholemaze, recalculate_consink_to_all_candidates_from_translation, find_consink_method2, find_consink_method3, get_dir_allframes, calculate_reldir_by_pos
 from HCT_analysis.utilities.trials_utils import get_limits_from_json, get_goal_numbers, get_coords, get_sink_positions_platforms, get_coords_127sinks
-import matplotlib.pyplot as plt
-from matplotlib.patches import RegularPolygon
-from tqdm import tqdm
 
-matplotlib.use("TkAgg")
-import pickle
-import datetime
 
 """ In this version, occupancy is normalised for each platform"""
 

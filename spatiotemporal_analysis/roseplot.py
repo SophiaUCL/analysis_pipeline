@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 from pathlib import Path
-from spatiotemporal_analysis.utils.spatial_features_plots import plot_roseplots, add_arm_overlay_roseplot
+from spatial_features.utils.spatial_features_plots import plot_roseplots, add_arm_overlay_roseplot
 from spatiotemporal_analysis.utils import get_MRL_data, get_directories, get_sum_bin
 
                      

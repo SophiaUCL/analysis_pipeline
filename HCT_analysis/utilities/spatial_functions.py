@@ -1,6 +1,7 @@
 import numpy as np
 import astropy.convolution as cnv
 
+""" Ratemap functions"""
 def get_ratemaps(spikes, x, y, n: int, binsize = 15, stddev = 5, frame_rate = 25):
     """
     Calculate the rate map for given spikes and positions.

@@ -57,6 +57,8 @@ def get_coordinates(params: dict) -> tuple[list[float], list[float]]:
     hcoord_translated, vcoord_translated = translate_coords(hcoord2, vcoord2, theta, x_center, y_center)
     return hcoord_translated, vcoord_translated
     
+    
+    
 def hex_grid(radius: int) -> list:
     """ Gives coordinates for hexagons for a maze with radius radius
     Returns them in axial coordinates (see https://www.redblobgames.com/grids/hexagons/ for further reading)"""
@@ -67,6 +69,7 @@ def hex_grid(radius: int) -> list:
         for r in range(r1, r2 + 1):
             coords.append([q, r, -q - r])
     return coords
+
 
 def is_point_in_platform(rat_locx: int, rat_locy: int, x_plat: int, y_plat: int, hex_side_length: int) -> bool:
     """ Checks whether the rat (rat_locx, rat_locy) on a given platform (x_plat, y_plat)

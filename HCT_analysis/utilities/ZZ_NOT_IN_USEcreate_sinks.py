@@ -4,6 +4,7 @@ import json
 from utilities.load_and_save_data import save_pickle
 from get_limits import plot_sink_bins
 
+""" NOT IN USE"""
 def get_xy_bins(limits, n_bins=120):
 
     # get the x and y limits of the maze

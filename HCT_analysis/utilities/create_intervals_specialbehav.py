@@ -7,10 +7,13 @@ def create_intervals_specialbehav(derivatives_base: Path):
     Finds the start and stop time for each trial, so that we can restrict spike times to for each goal
     NOTE Is based on the labview data
     Args:
-        rawsession_folder: path to rawsession folder
+        derivatives_base: Path to derivatives folder
 
     Raises:
         FileNotFoundError: No file for today_alltrials found
+        
+    Saves:
+    output_path = rawsession_folder/"task_metadata"/"restricted_final.csv": df with goal 0, goal 1, goal 2 times for each trial
     """
     print("Creating intervals special behaviour")
     
@@ -53,7 +56,7 @@ def check_restricted_df_exists(derivatives_base: Path) -> bool:
 def make_restricted_df(derivatives_base: Path, goals_to_include: list, trials_to_include: list) -> None:
     """ Makes a basic version of restricted df. columns: start g1 wrong	end g1 wrong	start g1	end g1	start g2	end g2
     Number of rows = len(trials_to_include)
-    This assumes that 0 is not in goals_to_include, because that data has to be inputted by the experimentalist
+
     first three columns will have only zeros
     end g1, start g2, and end g2 are read from the alltrials csv file
     
@@ -62,7 +65,9 @@ def make_restricted_df(derivatives_base: Path, goals_to_include: list, trials_to
         derivatives_base: path to derivatives folder
         goals_to_include: which goals are in the trial, from [0,1,2]
         trials_to_include: trial numbers
-    
+        
+    Saves:
+    output_path = rawsession_folder/"task_metadata"/"restricted_df.csv": start and end times for each trial for g0, g1, g2.
     """
     print("Making restricted df")
     rawsession_folder = Path(str(derivatives_base).replace("derivatives", "rawdata")).parent

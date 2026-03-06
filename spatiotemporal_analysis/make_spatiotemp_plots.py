@@ -9,10 +9,10 @@ from typing import Literal
 from spatiotemporal_analysis.get_sig_cells import get_sig_cells, resultant_vector_length # CHECK IF WORKS
 from spatial_features.utils.spatial_features_utils import load_unit_ids, get_spikes_epoch, get_spikes_tr, get_trial_length_info, get_unit_info, get_posdata, get_occupancy_time, get_ratemaps, get_spike_train_frames, get_directional_firingrate
 from spatial_features.utils.spatial_features_plots import plot_rmap, plot_directional_firingrate, plot_spikes_spatiotemp
-
 from spatiotemporal_analysis.utils import get_xy_pos, load_directories, make_new_element
 
 UnitTypes = Literal["all", "good", "pyramidal"]
+
 def make_spatiotemp_plots(derivatives_base: Path, trials_to_include: list, unit_type: UnitTypes, make_plots: bool = True, frame_rate: int = 25, sample_rate: int = 30000, num_bins: int = 24) -> tuple[Path, int]:
     """
     Makes the plots for the spatiotemporal experiments. Saves figures into analysis/cell_characteristics/spatial_features/spatial_plots/...

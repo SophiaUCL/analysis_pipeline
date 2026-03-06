@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from matplotlib.path import Path
-import os
+
 
 """
 Different utilities relating to finding platforms locations etc.
@@ -56,9 +56,6 @@ def is_point_in_platform(rat_locx, rat_locy, hcoord, vcoord, hex_side_length):
         ])
     hexagon_path = Path(hex_vertices)
     return hexagon_path.contains_point((rat_locx, rat_locy))
-
-    
-    
     
 def get_goals_coords(goals):
     return [get_platform_center(goals[0]), get_platform_center(goals[1])]

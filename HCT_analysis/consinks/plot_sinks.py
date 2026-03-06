@@ -8,11 +8,10 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Sequence, Tuple, Dict
-import matplotlib.pyplot as plt
-from matplotlib.patches import RegularPolygon
+from astropy.stats import circmean
 from HCT_analysis.utilities.load_and_save_data import load_pickle
 from HCT_analysis.utilities.trials_utils import get_coords, get_coords_127sinks
+
 def plot_all_consinks(consinks_df: pd.DataFrame,goal_coordinates: list,hcoord: list,vcoord: list,limits:dict,jitter,plot_dir: Path,plot_name: str = "ConSinks",) -> None:
     """
     Plot consinks for three goals in separate subplots.

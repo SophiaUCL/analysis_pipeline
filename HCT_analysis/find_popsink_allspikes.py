@@ -1,29 +1,18 @@
 import numpy as np
-import sys
 from pathlib import Path
-project_root = Path(__file__).resolve().parents[1]
-sys.path.append(str(project_root))
 from tqdm import tqdm
-from HCT_analysis.utilities.restrict_spiketrain_specialbehav import restrict_spiketrain_specialbehav
 import os
 import spikeinterface.extractors as se
 import pandas as pd
-from HCT_analysis.calculate_occupancy import get_direction_bins, \
-     get_relative_direction_occupancy_by_position_platformbins
-from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
-from HCT_analysis.utilities.trials_utils import ensure_sig_columns, get_goal_numbers, get_coords_127sinks, get_unit_ids, get_pos_data, get_spike_train, get_sink_positions_platforms, translate_positions
-import matplotlib
-from HCT_analysis.turn_restricteddf_frames import turn_restricteddf_frames
-from HCT_analysis.plotting.plot_sinks import  plot_all_consinks_127sinks
-from HCT_analysis.find_consinks_main_functions import get_reldir_bin_idx, calculate_averagesink, find_consink, get_reldir_occ_wholemaze, recalculate_consink_to_all_candidates_from_translation, find_consink_method2, find_consink_method3, get_dir_allframes
-from maze_and_platforms.overlay_maze_image_consinks import overlay_maze_image_consinks
-num_candidate_sinks = 127
-from HCT_analysis.utilities.trials_utils import translate_positions
 from typing import Literal
+from HCT_analysis.utilities.trials_utils import get_direction_bins
 from HCT_analysis.utilities.load_and_save_data import load_pickle, save_pickle
+from HCT_analysis.utilities.trials_utils import  get_goal_numbers, get_pos_data, get_spike_train, get_sink_positions_platforms, translate_positions
+from HCT_analysis.consinks.find_consinks_main_functions import get_reldir_bin_idx, find_consink, get_reldir_occ_wholemaze, recalculate_consink_to_all_candidates_from_translation, find_consink_method2, find_consink_method3, get_dir_allframes, calculate_reldir_by_pos
+
 
 RelDirOccTypes= Literal['all trials', 'intervals']
-
+num_candidate_sinks = 127
 
 
 def calculate_popsink_allspikes(derivatives_base: Path, load_units_which_method: int, rel_dir_occ: RelDirOccTypes, goals_to_include: list = [0,1,2], methods: list = [1,2,3], code_to_run: list = [0,1,2], frame_rate: int = 25, sample_rate: int = 30000):
@@ -71,27 +60,16 @@ def calculate_popsink_allspikes(derivatives_base: Path, load_units_which_method:
     
     if -1 in code_to_run:
         print("Calculating relative direction occupancy by position")
-        reldir_occ_by_pos= get_relative_direction_occupancy_by_position_platformbins(pos_data_reldir, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
-        np.save(os.path.join(output_folder, file_name), reldir_occ_by_pos)
-        if 0 in goals_to_include:
-            reldir_occ_by_pos_g0= get_relative_direction_occupancy_by_position_platformbins(pos_data_g0, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
-            np.save(os.path.join(output_folder, 'reldir_occ_by_pos_g0.npy'), reldir_occ_by_pos_g0)
-        if 1 in goals_to_include:
-            reldir_occ_by_pos_g1 = get_relative_direction_occupancy_by_position_platformbins(pos_data_g1, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
-            np.save(os.path.join(output_folder, 'reldir_occ_by_pos_g1.npy'), reldir_occ_by_pos_g1)
-        if 2 in goals_to_include:
-            reldir_occ_by_pos_g2 = get_relative_direction_occupancy_by_position_platformbins(pos_data_g2, sink_positions,num_candidate_sinks= 127, n_dir_bins=12, frame_rate=25)
-            np.save(os.path.join(output_folder, 'reldir_occ_by_pos_g2.npy'), reldir_occ_by_pos_g2)
+        calculate_reldir_by_pos(output_folder, sink_positions, pos_data_reldir,pos_data_g0,pos_data_g1,pos_data_g2,goals_to_include)
 
-    else:
-        print("Loading reldir occ, not calculating")
-        if 0 in goals_to_include:
-            reldir_occ_by_pos_g0= np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g0.npy'))
-        reldir_occ_by_pos = np.load(os.path.join(output_folder, file_name))
-        if 1 in goals_to_include:
-            reldir_occ_by_pos_g1 = np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g1.npy'))
-        if 2 in goals_to_include:
-            reldir_occ_by_pos_g2 = np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g2.npy'))
+   
+    reldir_occ_by_pos = np.load(os.path.join(output_folder, file_name))
+    if 0 in goals_to_include:
+        reldir_occ_by_pos_g0= np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g0.npy'))
+    if 1 in goals_to_include:
+        reldir_occ_by_pos_g1 = np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g1.npy'))
+    if 2 in goals_to_include:
+        reldir_occ_by_pos_g2 = np.load(os.path.join(output_folder, 'reldir_occ_by_pos_g2.npy'))
 
     ################# CALCULATE CONSINKS ###########################################
     
@@ -182,7 +160,7 @@ def calculate_popsink_allspikes(derivatives_base: Path, load_units_which_method:
         save_pickle(spike_train_allunits,f'spike_train_allunits_consinks_method_{unit_method}.pkl',  output_folder)
     results_df = pd.DataFrame(results)
     results_df.to_csv(output_folder/'popsink_results_allspikes.csv', index=False)
-    breakpoint()
+
 
 
 
